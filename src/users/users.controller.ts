@@ -58,8 +58,9 @@ export class UsersController {
   @Permissions('user:create')
   @ApiOperation({ summary: 'Create a new user (Admin)' })
   @ApiResponse({ status: 201, description: 'User created successfully.' })
-  create(@Body() createUserDto: CreateUserDto) {
-    return this.usersService.create(createUserDto);
+  async create(@Body() createUserDto: CreateUserDto) {
+    const data = await this.usersService.create(createUserDto);
+    return { data };
   }
 
   @Get()
@@ -87,31 +88,35 @@ export class UsersController {
   @ApiOperation({ summary: 'Get user details' })
   @ApiResponse({ status: 200, description: 'Return user details.' })
   @ApiResponse({ status: 404, description: 'User not found.' })
-  findOne(@Param('id') id: string) {
-    return this.usersService.findOne(id);
+  async findOne(@Param('id') id: string) {
+    const data = await this.usersService.findOne(id);
+    return { data };
   }
 
   @Patch(':id')
   @Permissions('user:update')
   @ApiOperation({ summary: 'Update user info' })
   @ApiResponse({ status: 200, description: 'User updated successfully.' })
-  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    return this.usersService.update(id, updateUserDto);
+  async update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
+    const data = await this.usersService.update(id, updateUserDto);
+    return { data };
   }
 
   @Post(':id/roles')
   @Permissions('user:update')
   @ApiOperation({ summary: 'Assign roles to user' })
   @ApiResponse({ status: 200, description: 'Roles assigned successfully.' })
-  assignRoles(@Param('id') id: string, @Body() dto: AssignRolesDto) {
-    return this.usersService.assignRoles(id, dto.roles);
+  async assignRoles(@Param('id') id: string, @Body() dto: AssignRolesDto) {
+    const data = await this.usersService.assignRoles(id, dto.roles);
+    return { data };
   }
 
   @Delete(':id')
   @Permissions('user:delete')
   @ApiOperation({ summary: 'Delete user' })
   @ApiResponse({ status: 200, description: 'User deleted successfully.' })
-  remove(@Param('id') id: string) {
-    return this.usersService.remove(id);
+  async remove(@Param('id') id: string) {
+    const data = await this.usersService.remove(id);
+    return { data };
   }
 }

@@ -70,20 +70,23 @@ export class BrandsController {
       const result = await this.cloudinaryService.uploadImage(file);
       createBrandDto.imageUrl = result.secure_url;
     }
-    return this.brandsService.create(createBrandDto);
+    const data = await this.brandsService.create(createBrandDto);
+    return { data };
   }
 
   @Get()
   @ApiOperation({ summary: 'Get all brands' })
   @ApiQuery({ name: 'search', required: false, type: String })
-  findAll(@Query('search') search?: string) {
-    return this.brandsService.findAll(search);
+  async findAll(@Query('search') search?: string) {
+    const data = await this.brandsService.findAll(search);
+    return { data };
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get brand details' })
-  findOne(@Param('id') id: string) {
-    return this.brandsService.findOne(id);
+  async findOne(@Param('id') id: string) {
+    const data = await this.brandsService.findOne(id);
+    return { data };
   }
 
   @Patch(':id')
@@ -102,7 +105,8 @@ export class BrandsController {
       const result = await this.cloudinaryService.uploadImage(file);
       updateBrandDto.imageUrl = result.secure_url;
     }
-    return this.brandsService.update(id, updateBrandDto);
+    const data = await this.brandsService.update(id, updateBrandDto);
+    return { data };
   }
 
   @Delete(':id')
@@ -110,7 +114,8 @@ export class BrandsController {
   @ApiBearerAuth()
   @Permissions('brand:delete')
   @ApiOperation({ summary: 'Delete brand' })
-  remove(@Param('id') id: string) {
-    return this.brandsService.remove(id);
+  async remove(@Param('id') id: string) {
+    const data = await this.brandsService.remove(id);
+    return { data };
   }
 }

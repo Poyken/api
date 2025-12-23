@@ -70,20 +70,23 @@ export class CategoriesController {
       const result = await this.cloudinaryService.uploadImage(file);
       createCategoryDto.imageUrl = result.secure_url;
     }
-    return this.categoriesService.create(createCategoryDto);
+    const data = await this.categoriesService.create(createCategoryDto);
+    return { data };
   }
 
   @Get()
   @ApiOperation({ summary: 'Get all categories' })
   @ApiQuery({ name: 'search', required: false, type: String })
-  findAll(@Query('search') search?: string) {
-    return this.categoriesService.findAll(search);
+  async findAll(@Query('search') search?: string) {
+    const data = await this.categoriesService.findAll(search);
+    return { data };
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get category details' })
-  findOne(@Param('id') id: string) {
-    return this.categoriesService.findOne(id);
+  async findOne(@Param('id') id: string) {
+    const data = await this.categoriesService.findOne(id);
+    return { data };
   }
 
   @Patch(':id')
@@ -102,7 +105,8 @@ export class CategoriesController {
       const result = await this.cloudinaryService.uploadImage(file);
       updateCategoryDto.imageUrl = result.secure_url;
     }
-    return this.categoriesService.update(id, updateCategoryDto);
+    const data = await this.categoriesService.update(id, updateCategoryDto);
+    return { data };
   }
 
   @Delete(':id')
@@ -110,7 +114,8 @@ export class CategoriesController {
   @ApiBearerAuth()
   @Permissions('category:delete')
   @ApiOperation({ summary: 'Delete category' })
-  remove(@Param('id') id: string) {
-    return this.categoriesService.remove(id);
+  async remove(@Param('id') id: string) {
+    const data = await this.categoriesService.remove(id);
+    return { data };
   }
 }

@@ -34,6 +34,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { AuditInterceptor } from './audit/audit.interceptor';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
+import { BlogModule } from './blog/blog.module';
 import { CartModule } from './cart/cart.module';
 import { CloudinaryModule } from './common/cloudinary/cloudinary.module';
 import { CommonModule } from './common/common.module';
@@ -55,7 +56,6 @@ import { RolesModule } from './roles/roles.module';
 import { ShippingModule } from './shipping/shipping.module';
 import { UsersModule } from './users/users.module';
 import { WishlistModule } from './wishlist/wishlist.module';
-import { BlogModule } from './blog/blog.module';
 
 @Module({
   imports: [
@@ -102,8 +102,7 @@ import { BlogModule } from './blog/blog.module';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         connection: {
-          host: configService.get('REDIS_HOST') || 'localhost',
-          port: configService.get('REDIS_PORT') || 6379,
+          url: configService.get('REDIS_URL') || 'redis://localhost:6379',
         },
       }),
       inject: [ConfigService],

@@ -61,11 +61,12 @@ export class NotificationsController {
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
-    return this.notificationsService.findAll(
+    const data = await this.notificationsService.findAll(
       req.user.userId,
       limit ? parseInt(limit) : 20,
       offset ? parseInt(offset) : 0,
     );
+    return { data };
   }
 
   /**
@@ -73,10 +74,10 @@ export class NotificationsController {
    */
   @Get('unread-count')
   async getUnreadCount(@Request() req) {
-    const count = await this.notificationsService.getUnreadCount(
+    const data = await this.notificationsService.getUnreadCount(
       req.user.userId,
     );
-    return { count };
+    return { data };
   }
 
   /**
@@ -84,7 +85,8 @@ export class NotificationsController {
    */
   @Patch('read-all')
   async markAllAsRead(@Request() req) {
-    return this.notificationsService.markAllAsRead(req.user.userId);
+    const data = await this.notificationsService.markAllAsRead(req.user.userId);
+    return { data };
   }
 
   /**
@@ -92,7 +94,11 @@ export class NotificationsController {
    */
   @Patch(':id/read')
   async markAsRead(@Request() req, @Param('id') id: string) {
-    return this.notificationsService.markAsRead(id, req.user.userId);
+    const data = await this.notificationsService.markAsRead(
+      id,
+      req.user.userId,
+    );
+    return { data };
   }
 
   /**
@@ -100,7 +106,8 @@ export class NotificationsController {
    */
   @Delete(':id')
   async delete(@Request() req, @Param('id') id: string) {
-    return this.notificationsService.delete(id, req.user.userId);
+    const data = await this.notificationsService.delete(id, req.user.userId);
+    return { data };
   }
 
   /**
@@ -108,7 +115,8 @@ export class NotificationsController {
    */
   @Delete('read-all')
   async deleteAllRead(@Request() req) {
-    return this.notificationsService.deleteAllRead(req.user.userId);
+    const data = await this.notificationsService.deleteAllRead(req.user.userId);
+    return { data };
   }
 
   // ========== ADMIN ENDPOINTS ==========
@@ -133,7 +141,7 @@ export class NotificationsController {
       // TODO: Implement email broadcasting via queue
     }
 
-    return result;
+    return { data: result };
   }
 
   /**
@@ -159,7 +167,7 @@ export class NotificationsController {
       );
     }
 
-    return result;
+    return { data: result };
   }
 
   /**
@@ -180,11 +188,12 @@ export class NotificationsController {
     if (type) filters.type = type;
     if (isRead !== undefined) filters.isRead = isRead === 'true';
 
-    return this.notificationsService.findAllAdmin(
+    const data = await this.notificationsService.findAllAdmin(
       page ? parseInt(page) : 1,
       limit ? parseInt(limit) : 50,
       filters,
     );
+    return data; // Already has { data, meta }
   }
 
   /**
@@ -194,7 +203,8 @@ export class NotificationsController {
   @UseGuards(PermissionsGuard)
   @Permissions('notification:read')
   async findOne(@Param('id') id: string) {
-    return this.notificationsService.findOne(id);
+    const data = await this.notificationsService.findOne(id);
+    return { data };
   }
 
   /**
@@ -204,8 +214,9 @@ export class NotificationsController {
   @UseGuards(PermissionsGuard)
   @Permissions('notification:delete')
   async cleanupOldNotifications(@Query('daysOld') daysOld?: string) {
-    return this.notificationsService.deleteOldReadNotifications(
+    const data = await this.notificationsService.deleteOldReadNotifications(
       daysOld ? parseInt(daysOld) : 30,
     );
+    return { data };
   }
 }

@@ -52,7 +52,8 @@ export class BlogController {
       const result = await this.cloudinaryService.uploadImage(file, 'blogs');
       createBlogDto.image = (result as any).secure_url;
     }
-    return this.blogService.create(createBlogDto);
+    const data = await this.blogService.create(createBlogDto);
+    return { data };
   }
 
   @Get()
@@ -61,28 +62,29 @@ export class BlogController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'category', required: false, type: String })
   @ApiQuery({ name: 'language', required: false, type: String })
-  findAll(
+  async findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('category') category?: string,
     @Query('language') language?: string,
   ) {
-    return this.blogService.findAll({
+    const result = await this.blogService.findAll({
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
       category,
       language,
     });
+    return result; // Already returns { data, meta }
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a single blog post by ID or slug' })
   async findOne(@Param('id') id: string) {
-    const blog = await this.blogService.findOne(id);
-    if (!blog) {
+    const data = await this.blogService.findOne(id);
+    if (!data) {
       throw new Error('Blog not found');
     }
-    return blog;
+    return { data };
   }
 
   @Patch(':id')
@@ -101,7 +103,8 @@ export class BlogController {
       const result = await this.cloudinaryService.uploadImage(file, 'blogs');
       updateBlogDto.image = (result as any).secure_url;
     }
-    return this.blogService.update(id, updateBlogDto);
+    const data = await this.blogService.update(id, updateBlogDto);
+    return { data };
   }
 
   @Delete(':id')

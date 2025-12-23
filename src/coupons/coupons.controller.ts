@@ -23,50 +23,55 @@ export class CouponsController {
   @Post()
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions('coupon:create')
-  create(@Body() createCouponDto: CreateCouponDto) {
-    return this.couponsService.create(createCouponDto);
+  async create(@Body() createCouponDto: CreateCouponDto) {
+    const data = await this.couponsService.create(createCouponDto);
+    return { data };
   }
 
   @Get()
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions('coupon:read')
-  findAll() {
-    return this.couponsService.findAll();
+  async findAll() {
+    const data = await this.couponsService.findAll();
+    return { data };
   }
 
   @Get('validate')
-  validate(@Query('code') code: string, @Query('amount') amount: number) {
-    return this.couponsService.validateCoupon(code, Number(amount));
+  async validate(@Query('code') code: string, @Query('amount') amount: number) {
+    const data = await this.couponsService.validateCoupon(code, Number(amount));
+    return { data };
   }
 
   @Get('available')
   async findAvailable() {
-    const coupons = await this.couponsService.findAvailable();
-    // console.log(
-    //   `[Coupons] Found ${coupons.length} available coupons`,
-    //   coupons.map((c) => c.code),
-    // );
-    return coupons;
+    const data = await this.couponsService.findAvailable();
+    return { data };
   }
 
   @Get(':id')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions('coupon:read')
-  findOne(@Param('id') id: string) {
-    return this.couponsService.findOne(id);
+  async findOne(@Param('id') id: string) {
+    const data = await this.couponsService.findOne(id);
+    return { data };
   }
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions('coupon:update')
-  update(@Param('id') id: string, @Body() updateCouponDto: UpdateCouponDto) {
-    return this.couponsService.update(id, updateCouponDto);
+  async update(
+    @Param('id') id: string,
+    @Body() updateCouponDto: UpdateCouponDto,
+  ) {
+    const data = await this.couponsService.update(id, updateCouponDto);
+    return { data };
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions('coupon:delete')
-  remove(@Param('id') id: string) {
-    return this.couponsService.remove(id);
+  async remove(@Param('id') id: string) {
+    const data = await this.couponsService.remove(id);
+    return { data };
   }
 }

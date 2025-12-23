@@ -74,22 +74,24 @@ export class ReviewsController {
   @ApiOperation({
     summary: 'Gửi đánh giá (Phải đã mua sản phẩm & ĐÃ GIAO HÀNG)',
   })
-  create(
+  async create(
     @GetUser('id') userId: string,
     @Body() createReviewDto: CreateReviewDto,
   ) {
-    return this.reviewsService.create(userId, createReviewDto);
+    const data = await this.reviewsService.create(userId, createReviewDto);
+    return { data };
   }
 
   @Get('check-eligibility')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Kiểm tra quyền đánh giá' })
-  checkEligibility(
+  async checkEligibility(
     @GetUser('id') userId: string,
     @Query('productId') productId: string,
   ) {
-    return this.reviewsService.checkEligibility(userId, productId);
+    const data = await this.reviewsService.checkEligibility(userId, productId);
+    return { data };
   }
 
   @Get('product/:productId')
@@ -111,28 +113,31 @@ export class ReviewsController {
   @Permissions('review:delete')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Xóa đánh giá (Admin)' })
-  remove(@Param('id') id: string) {
-    return this.reviewsService.remove(id);
+  async remove(@Param('id') id: string) {
+    const data = await this.reviewsService.remove(id);
+    return { data };
   }
 
   @Delete('mine/:id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Xóa đánh giá của tôi' })
-  removeOwn(@GetUser('id') userId: string, @Param('id') id: string) {
-    return this.reviewsService.removeOwn(userId, id);
+  async removeOwn(@GetUser('id') userId: string, @Param('id') id: string) {
+    const data = await this.reviewsService.removeOwn(userId, id);
+    return { data };
   }
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cập nhật đánh giá' })
-  update(
+  async update(
     @GetUser('id') userId: string,
     @Param('id') id: string,
     @Body() updateReviewDto: UpdateReviewDto,
   ) {
-    return this.reviewsService.update(userId, id, updateReviewDto);
+    const data = await this.reviewsService.update(userId, id, updateReviewDto);
+    return { data };
   }
 
   @Post('upload')
@@ -145,16 +150,16 @@ export class ReviewsController {
     const uploaded = await Promise.all(
       files.map((file) => this.cloudinaryService.uploadImage(file)),
     );
-    return {
-      urls: uploaded.map((res) => res.secure_url),
-    };
+    const urls = uploaded.map((res) => res.secure_url);
+    return { data: urls };
   }
   @Post(':id/reply')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions('review:update')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Trả lời đánh giá (Admin)' })
-  reply(@Param('id') id: string, @Body('reply') reply: string) {
-    return this.reviewsService.replyToReview(id, reply);
+  async reply(@Param('id') id: string, @Body('reply') reply: string) {
+    const data = await this.reviewsService.replyToReview(id, reply);
+    return { data };
   }
 }

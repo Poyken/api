@@ -59,8 +59,9 @@ export class AuthController {
   @ApiOperation({ summary: 'Đăng ký tài khoản mới' })
   @ApiResponse({ status: 201, description: 'Đăng ký thành công.' })
   @ApiResponse({ status: 409, description: 'Email đã tồn tại.' })
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+  async register(@Body() dto: RegisterDto) {
+    const data = await this.authService.register(dto);
+    return { data };
   }
 
   @Post('login')
@@ -71,8 +72,9 @@ export class AuthController {
     description: 'Đăng nhập thành công, trả về Tokens và User Info.',
   })
   @ApiResponse({ status: 401, description: 'Sai email hoặc mật khẩu.' })
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  async login(@Body() dto: LoginDto) {
+    const data = await this.authService.login(dto);
+    return { data };
   }
 
   @Post('logout')
@@ -81,8 +83,9 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Đăng xuất (Revoke Refresh Token)' })
   @ApiResponse({ status: 200, description: 'Đăng xuất thành công.' })
-  logout(@Request() req: any) {
-    return this.authService.logout(req.user.userId);
+  async logout(@Request() req: any) {
+    const data = await this.authService.logout(req.user.userId);
+    return { data };
   }
 
   @Get('me')
@@ -90,8 +93,9 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Lấy thông tin profile & quyền hạn của tôi' })
   @ApiResponse({ status: 200, description: 'Trả về thông tin user chi tiết.' })
-  getProfile(@Request() req: any) {
-    return this.authService.getMe(req.user.userId);
+  async getProfile(@Request() req: any) {
+    const data = await this.authService.getMe(req.user.userId);
+    return { data };
   }
 
   @Patch('me')
@@ -99,8 +103,9 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cập nhật thông tin cá nhân' })
   @ApiResponse({ status: 200, description: 'Cập nhật thành công.' })
-  updateProfile(@Request() req: any, @Body() body: any) {
-    return this.authService.updateProfile(req.user.userId, body);
+  async updateProfile(@Request() req: any, @Body() body: any) {
+    const data = await this.authService.updateProfile(req.user.userId, body);
+    return { data };
   }
 
   @Post('refresh')
@@ -111,8 +116,9 @@ export class AuthController {
     status: 401,
     description: 'Refresh token không hợp lệ hoặc đã hết hạn.',
   })
-  refresh(@Body() dto: RefreshTokenDto) {
-    return this.authService.refreshTokens(dto.refreshToken);
+  async refresh(@Body() dto: RefreshTokenDto) {
+    const data = await this.authService.refreshTokens(dto.refreshToken);
+    return { data };
   }
 
   @Post('forgot-password')
@@ -122,16 +128,21 @@ export class AuthController {
     status: 200,
     description: 'Email đặt lại mật khẩu đã được gửi.',
   })
-  forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.authService.forgotPassword(dto.email);
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    const data = await this.authService.forgotPassword(dto.email);
+    return { data };
   }
 
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Đặt lại mật khẩu mới' })
   @ApiResponse({ status: 200, description: 'Mật khẩu đã được cập nhật.' })
-  resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.authService.resetPassword(dto.token, dto.newPassword);
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    const data = await this.authService.resetPassword(
+      dto.token,
+      dto.newPassword,
+    );
+    return { data };
   }
   @Get('google')
   @UseGuards(AuthGuard('google'))

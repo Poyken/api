@@ -54,8 +54,9 @@ export class CartController {
    */
   @Get()
   @ApiOperation({ summary: 'Lấy giỏ hàng của người dùng hiện tại' })
-  getCart(@Request() req) {
-    return this.cartService.getCart(req.user.id);
+  async getCart(@Request() req) {
+    const data = await this.cartService.getCart(req.user.id);
+    return { data };
   }
 
   /**
@@ -64,8 +65,9 @@ export class CartController {
    */
   @Post()
   @ApiOperation({ summary: 'Thêm sản phẩm vào giỏ hàng' })
-  addToCart(@Request() req, @Body() dto: AddToCartDto) {
-    return this.cartService.addToCart(req.user.id, dto);
+  async addToCart(@Request() req, @Body() dto: AddToCartDto) {
+    const data = await this.cartService.addToCart(req.user.id, dto);
+    return { data };
   }
 
   /**
@@ -74,12 +76,13 @@ export class CartController {
    */
   @Patch('items/:id')
   @ApiOperation({ summary: 'Cập nhật số lượng sản phẩm trong giỏ' })
-  updateItem(
+  async updateItem(
     @Request() req,
     @Param('id') itemId: string,
     @Body() dto: UpdateCartItemDto,
   ) {
-    return this.cartService.updateItem(req.user.id, itemId, dto);
+    const data = await this.cartService.updateItem(req.user.id, itemId, dto);
+    return { data };
   }
 
   /**
@@ -87,8 +90,9 @@ export class CartController {
    */
   @Delete('items/:id')
   @ApiOperation({ summary: 'Xóa một sản phẩm khỏi giỏ hàng' })
-  removeItem(@Request() req, @Param('id') itemId: string) {
-    return this.cartService.removeItem(req.user.id, itemId);
+  async removeItem(@Request() req, @Param('id') itemId: string) {
+    const data = await this.cartService.removeItem(req.user.id, itemId);
+    return { data };
   }
 
   /**
@@ -96,8 +100,9 @@ export class CartController {
    */
   @Delete()
   @ApiOperation({ summary: 'Xóa toàn bộ giỏ hàng' })
-  clearCart(@Request() req) {
-    return this.cartService.clearCart(req.user.id);
+  async clearCart(@Request() req) {
+    const data = await this.cartService.clearCart(req.user.id);
+    return { data };
   }
 
   /**
@@ -110,10 +115,11 @@ export class CartController {
    */
   @Post('merge')
   @ApiOperation({ summary: 'Gộp giỏ hàng guest vào tài khoản user' })
-  mergeCart(
+  async mergeCart(
     @Request() req,
     @Body() items: { skuId: string; quantity: number }[],
   ) {
-    return this.cartService.mergeCart(req.user.id, items);
+    const data = await this.cartService.mergeCart(req.user.id, items);
+    return { data };
   }
 }

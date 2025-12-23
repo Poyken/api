@@ -55,21 +55,24 @@ export class OrdersController {
 
   @Post()
   @ApiOperation({ summary: 'Thanh toán / Tạo đơn hàng' })
-  create(@Request() req, @Body() createOrderDto: CreateOrderDto) {
-    return this.ordersService.create(req.user.id, createOrderDto);
+  async create(@Request() req, @Body() createOrderDto: CreateOrderDto) {
+    const data = await this.ordersService.create(req.user.id, createOrderDto);
+    return { data };
   }
 
   @Get('my-orders')
   @ApiOperation({ summary: 'Lấy lịch sử đơn hàng của người dùng hiện tại' })
-  findMyOrders(@Request() req) {
-    return this.ordersService.findAllByUser(req.user.id);
+  async findMyOrders(@Request() req) {
+    const data = await this.ordersService.findAllByUser(req.user.id);
+    return { data };
   }
 
   @Get('my-orders/:id')
   @ApiOperation({ summary: 'Lấy chi tiết một đơn hàng cụ thể' })
-  findOneMyOrder(@Request() req, @Param('id') id: string) {
+  async findOneMyOrder(@Request() req, @Param('id') id: string) {
     // TODO: Thêm kiểm tra quyền sở hữu bên trong service
-    return this.ordersService.findOne(id, req.user.id);
+    const data = await this.ordersService.findOne(id, req.user.id);
+    return { data };
   }
 
   // Các route Admin
@@ -98,23 +101,29 @@ export class OrdersController {
   @UseGuards(PermissionsGuard)
   @Permissions('order:read')
   @ApiOperation({ summary: 'Lấy chi tiết đơn hàng (Admin)' })
-  findOne(@Param('id') id: string) {
-    return this.ordersService.findOneAdmin(id);
+  async findOne(@Param('id') id: string) {
+    const data = await this.ordersService.findOneAdmin(id);
+    return { data };
   }
 
   @Patch(':id/status')
   @UseGuards(PermissionsGuard)
   @Permissions('order:update')
   @ApiOperation({ summary: 'Cập nhật trạng thái đơn hàng (Admin)' })
-  updateStatus(@Param('id') id: string, @Body() dto: UpdateOrderStatusDto) {
-    return this.ordersService.updateStatus(id, dto);
+  async updateStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateOrderStatusDto,
+  ) {
+    const data = await this.ordersService.updateStatus(id, dto);
+    return { data };
   }
 
   @Get(':id/invoice')
   @UseGuards(PermissionsGuard)
   @Permissions('order:read')
   @ApiOperation({ summary: 'Lấy dữ liệu hóa đơn (Admin)' })
-  getInvoice(@Param('id') id: string) {
-    return this.invoiceService.generateInvoiceData(id);
+  async getInvoice(@Param('id') id: string) {
+    const data = await this.invoiceService.generateInvoiceData(id);
+    return { data };
   }
 }

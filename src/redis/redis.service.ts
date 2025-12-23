@@ -32,13 +32,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   public client: Redis;
 
   constructor() {
-    const redisHost = process.env.REDIS_HOST || 'localhost';
-    const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
+    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 
-    this.client = new Redis({
-      host: redisHost,
-      port: redisPort,
-    });
+    this.client = new Redis(redisUrl);
   }
 
   onModuleInit() {

@@ -33,8 +33,10 @@ RUN npx prisma generate
 
 # Copy source và build
 COPY . .
-RUN npm run build && \
-    npx tsc prisma/seed.ts --outDir dist/prisma --skipLibCheck --module commonjs --target es2020
+# 1. Build main application
+RUN npm run build
+# 2. Build seeds into a separate folder within dist
+RUN npx tsc prisma/seed.ts prisma/seed-products.ts prisma/seed-blog.ts --outDir dist/seeds --skipLibCheck --module commonjs --target es2020
 
 # Prune dev dependencies, giữ lại chỉ production deps
 RUN --mount=type=cache,target=/root/.npm \

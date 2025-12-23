@@ -1,27 +1,6 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsEnum, IsNumber, IsOptional, IsString, Min } from 'class-validator';
-
-/**
- * =====================================================================
- * FILTER PRODUCT DTO - Đối tượng lọc và tìm kiếm sản phẩm
- * =====================================================================
- *
- * 📚 GIẢI THÍCH CHO THỰC TẬP SINH:
- *
- * 1. QUERY PARAMETER TRANSFORMATION:
- * - Các tham số từ URL luôn là chuỗi (String).
- * - `@Type(() => Number)`: Giúp tự động chuyển đổi các chuỗi này thành số (Number) để ta có thể so sánh giá hoặc phân trang.
- *
- * 2. PAGINATION (Phân trang):
- * - `page` và `limit`: Giúp giới hạn số lượng sản phẩm trả về mỗi lần, tránh làm quá tải server và frontend khi có hàng ngàn sản phẩm.
- *
- * 3. SORTING (Sắp xếp):
- * - `SortOption`: Enum định nghĩa các kiểu sắp xếp phổ biến (Giá tăng/giảm, Mới nhất).
- *
- * 4. OPTIONAL FILTERS:
- * - Tất cả các trường đều là `@IsOptional()`, cho phép người dùng linh hoạt lọc theo bất kỳ tiêu chí nào hoặc không lọc gì cả.
- * =====================================================================
- */
 
 export enum SortOption {
   PRICE_ASC = 'price_asc',
@@ -31,48 +10,62 @@ export enum SortOption {
 }
 
 export class FilterProductDto {
+  @ApiPropertyOptional({ description: 'Tìm theo tên hoặc mô tả' })
   @IsOptional()
   @IsString()
   search?: string;
 
+  @ApiPropertyOptional({ description: 'Lọc theo ID danh mục' })
   @IsOptional()
   @IsString()
   categoryId?: string;
 
+  @ApiPropertyOptional({ description: 'Lọc theo ID thương hiệu' })
   @IsOptional()
   @IsString()
   brandId?: string;
 
+  @ApiPropertyOptional({
+    description: 'Lọc theo danh sách ID sản phẩm (phân tách bằng dấu phẩy)',
+  })
   @IsOptional()
   @IsString()
-  ids?: string; // Comma separated IDs
+  ids?: string;
 
+  @ApiPropertyOptional({ description: 'Giá thấp nhất' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
   minPrice?: number;
 
+  @ApiPropertyOptional({ description: 'Giá cao nhất' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
   maxPrice?: number;
 
+  @ApiPropertyOptional({ enum: SortOption, description: 'Sắp xếp theo' })
   @IsOptional()
   @IsEnum(SortOption)
   sort?: SortOption;
 
+  @ApiPropertyOptional({
+    description: 'Có bao gồm đầy đủ thông tin SKU không (true/false)',
+  })
   @IsOptional()
   @IsString()
   includeSkus?: string;
 
+  @ApiPropertyOptional({ description: 'Trang hiện tại', default: 1 })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(1)
   page?: number = 1;
 
+  @ApiPropertyOptional({ description: 'Số sản phẩm mỗi trang', default: 10 })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
