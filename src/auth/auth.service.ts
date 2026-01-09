@@ -291,7 +291,7 @@ export class AuthService {
           email,
           OR: [
             { tenantId: tenant?.id },
-            { roles: { some: { role: { name: 'SUPER_ADMIN' } } } },
+            { roles: { some: { role: { name: 'Super Admin' } } } },
           ],
         },
         select: this.USER_PERMISSION_SELECT,
