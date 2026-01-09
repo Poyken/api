@@ -23,7 +23,8 @@
     "seed": "ts-node --transpile-only prisma/seed.ts",
     "seed:prod": "node dist/prisma/seed.js",
     "cache:clear": "ts-node --transpile-only scripts/clear-cache.ts",
-    "seed:minimal": "ts-node --transpile-only prisma/seed-minimal.ts"
+    "seed:minimal": "ts-node --transpile-only prisma/seed-minimal.ts",
+    "bootstrap": "ts-node --transpile-only prisma/bootstrap.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed-minimal.ts"
