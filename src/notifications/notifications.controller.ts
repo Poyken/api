@@ -1,0 +1,264 @@
+import { Permissions } from '@/auth/decorators/permissions.decorator';
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
+import { PermissionsGuard } from '@/auth/permissions.guard';
+import { EmailService } from '@integrations/email/email.service';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Logger,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Request,
+  UseGuards,
+  ValidationPipe,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
+import { SendToUserDto } from './dto/send-to-user.dto';
+import { NotificationsService } from './notifications.service';
+
+/**
+ * =====================================================================
+ * NOTIFICATIONS CONTROLLER - API endpoints cho thông báo
+ * =====================================================================
+ *
+ * 📚 GIẢI THÍCH CHO THỰC TẬP SINH:
+ *
+ * 1. USER ENDPOINTS (Authenticated):
+ * - GET / : Lấy danh sách thông báo của user
+ * - GET /unread-count : Đếm số thông báo chưa đọc
+ * - PATCH /:id/read : Đánh dấu một thông báo đã đọc
+ * - PATCH /read-all : Đánh dấu tất cả đã đọc
+ * - DELETE /:id : Xóa một thông báo
+ * - DELETE /read-all : Xóa tất cả thông báo đã đọc
+ *
+ * 2. ADMIN ENDPOINTS (Require permissions):
+ * - POST /admin/broadcast : Gửi thông báo cho tất cả users
+ * - POST /admin/send : Gửi thông báo cho user cụ thể
+ * - GET /admin : Xem tất cả thông báo (với filters)
+ * - GET /admin/:id : Xem chi tiết thông báo
+ * =====================================================================
+ */
+
+@ApiTags('Notifications')
+@Controller('notifications')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
+export class NotificationsController {
+  private readonly logger = new Logger(NotificationsController.name);
+
+  constructor(
+    private readonly notificationsService: NotificationsService,
+    private readonly emailService: EmailService,
+  ) {}
+
+  // ========== USER ENDPOINTS ==========
+
+  /**
+   * Lấy danh sách thông báo của user hiện tại
+   */
+  @Get()
+  @ApiOperation({ summary: 'Lấy danh sách thông báo của user hiện tại' })
+  async findAll(
+    @Request() req,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    try {
+      const userId = req.user.userId || req.user.id;
+      if (!userId) {
+        this.logger.warn(
+          '[NotificationsController] No userId found in request',
+          {
+            user: req.user,
+          },
+        );
+      }
+      const data = await this.notificationsService.findAll(
+        userId,
+        limit ? parseInt(limit) : 20,
+        offset ? parseInt(offset) : 0,
+      );
+      return { data };
+    } catch (err) {
+      this.logger.error('[NotificationsController] findAll error:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Đếm số thông báo chưa đọc
+   */
+  @Get('unread-count')
+  @ApiOperation({ summary: 'Đếm số thông báo chưa đọc' })
+  async getUnreadCount(@Request() req) {
+    const data = await this.notificationsService.getUnreadCount(
+      req.user.userId || req.user.id,
+    );
+    return { data };
+  }
+
+  /**
+   * Đánh dấu tất cả thông báo đã đọc
+   */
+  @Patch('read-all')
+  @ApiOperation({ summary: 'Đánh dấu tất cả thông báo đã đọc' })
+  async markAllAsRead(@Request() req) {
+    const data = await this.notificationsService.markAllAsRead(
+      req.user.userId || req.user.id,
+    );
+    return { data };
+  }
+
+  /**
+   * Đánh dấu một thông báo đã đọc
+   */
+  @Patch(':id/read')
+  @ApiOperation({ summary: 'Đánh dấu một thông báo đã đọc' })
+  async markAsRead(@Request() req, @Param('id') id: string) {
+    const data = await this.notificationsService.markAsRead(
+      id,
+      req.user.userId || req.user.id,
+    );
+    return { data };
+  }
+
+  /**
+   * Xóa một thông báo
+   */
+  @Delete(':id')
+  @ApiOperation({ summary: 'Xóa một thông báo' })
+  async delete(@Request() req, @Param('id') id: string) {
+    const data = await this.notificationsService.delete(
+      id,
+      req.user.userId || req.user.id,
+    );
+    return { data };
+  }
+
+  /**
+   * Xóa tất cả thông báo đã đọc
+   */
+  @Delete('read-all')
+  @ApiOperation({ summary: 'Xóa tất cả thông báo đã đọc' })
+  async deleteAllRead(@Request() req) {
+    const data = await this.notificationsService.deleteAllRead(
+      req.user.userId || req.user.id,
+    );
+    return { data };
+  }
+
+  // ========== ADMIN ENDPOINTS ==========
+
+  /**
+   * Gửi thông báo cho TẤT CẢ users (Broadcast)
+   */
+  @Post('admin/broadcast')
+  @UseGuards(PermissionsGuard)
+  @Permissions('notification:create')
+  @ApiOperation({ summary: 'Gửi thông báo cho TẤT CẢ users (Broadcast)' })
+  async broadcast(@Body(ValidationPipe) data: BroadcastNotificationDto) {
+    const result = await this.notificationsService.broadcast({
+      type: data.type,
+      title: data.title,
+      message: data.message,
+      link: data.link,
+    });
+
+    if (data.sendEmail) {
+      this.logger.log('Broadcasting email to all users...');
+      // TODO: Implement email broadcasting via queue
+    }
+
+    return { data: result };
+  }
+
+  /**
+   * Gửi thông báo cho user cụ thể
+   */
+  @Post('admin/send')
+  @UseGuards(PermissionsGuard)
+  @Permissions('notification:create')
+  @ApiOperation({ summary: 'Gửi thông báo cho user cụ thể' })
+  async sendToUser(@Body(ValidationPipe) data: SendToUserDto) {
+    try {
+      const result = await this.notificationsService.create({
+        userId: data.userId,
+        type: data.type,
+        title: data.title,
+        message: data.message,
+        link: data.link,
+      });
+
+      if (data.sendEmail && data.email) {
+        await this.emailService.sendCustomEmail(
+          data.email,
+          data.title,
+          data.message,
+        );
+      }
+
+      return { data: result };
+    } catch (err) {
+      this.logger.error('[NotificationsController] sendToUser error:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Lấy tất cả thông báo (Admin view với filters)
+   */
+  @Get('admin/all')
+  @UseGuards(PermissionsGuard)
+  @Permissions('notification:read')
+  @ApiOperation({ summary: 'Lấy tất cả thông báo (Admin view với filters)' })
+  async findAllAdmin(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('userId') userId?: string,
+    @Query('type') type?: string,
+    @Query('isRead') isRead?: string,
+  ) {
+    const filters: any = {};
+    if (userId) filters.userId = userId;
+    if (type) filters.type = type;
+    if (isRead !== undefined) filters.isRead = isRead === 'true';
+
+    const data = await this.notificationsService.findAllAdmin(
+      page ? parseInt(page) : 1,
+      limit ? parseInt(limit) : 50,
+      filters,
+    );
+    return data; // Already has { data, meta }
+  }
+
+  /**
+   * Lấy chi tiết một thông báo (Admin)
+   */
+  @Get('admin/:id')
+  @UseGuards(PermissionsGuard)
+  @Permissions('notification:read')
+  @ApiOperation({ summary: 'Lấy chi tiết một thông báo (Admin)' })
+  async findOne(@Param('id') id: string) {
+    const data = await this.notificationsService.findOne(id);
+    return { data };
+  }
+
+  /**
+   * Cleanup: Xóa thông báo đã đọc cũ (Admin)
+   */
+  @Delete('admin/cleanup')
+  @UseGuards(PermissionsGuard)
+  @Permissions('notification:delete')
+  @ApiOperation({ summary: 'Cleanup: Xóa thông báo đã đọc cũ (Admin)' })
+  async cleanupOldNotifications(@Query('daysOld') daysOld?: string) {
+    const data = await this.notificationsService.deleteOldReadNotifications(
+      daysOld ? parseInt(daysOld) : 30,
+    );
+    return { data };
+  }
+}
