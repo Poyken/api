@@ -138,6 +138,7 @@ async function bootstrap() {
         'https://web-okfy.onrender.com',
         'https://web-faxqzimea-poykens-projects.vercel.app',
         'https://web-five-gilt-79.vercel.app', // Production Domain
+        'https://e293f8e5fb98.ngrok-free.app',
       ].filter(Boolean); // Lọc bỏ giá trị undefined/null
 
       // 1. Cho phép request không có origin (Server-to-Server, Tools like Postman)
