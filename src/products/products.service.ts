@@ -45,7 +45,7 @@ import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import type { Cache } from 'cache-manager';
-import slugify from 'slugify';
+import { createSlug } from '../common/utils/string';
 import { CreateProductDto } from './dto/create-product.dto';
 import { FilterProductDto, SortOption } from './dto/filter-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -82,20 +82,16 @@ export class ProductsService {
   async create(createProductDto: CreateProductDto) {
     const { options, images, ...productData } = createProductDto;
 
-    // [PLAN LIMIT] Check current usage
+    // [PLAN LIMIT] Kiểm tra giới hạn gói dịch vụ hiện tại (Basic/Pro/Enterprise)
     const tenant = getTenant();
     if (tenant) {
       await this.planUsageService.checkProductLimit(tenant.id);
     }
 
-    // 1. Tạo Slug tự động từ tên
+    // 1. Tạo Slug tự động từ tên nếu chưa có
+    const slug = productData.slug || createSlug(productData.name);
 
-    // 1. Tạo Slug tự động từ tên
-    const slug =
-      productData.slug ||
-      slugify(productData.name, { lower: true, strict: true });
-
-    // 2. Validate khóa ngoại: Categories và Brand phải tồn tại
+    // 2. Validate khóa ngoại: Categories và Brand phải tồn tại trong DB
     const [categories, brand] = await Promise.all([
       this.prisma.category.findMany({
         where: { id: { in: createProductDto.categoryIds } },
@@ -107,7 +103,7 @@ export class ProductsService {
       throw new NotFoundException('Một hoặc nhiều danh mục không tồn tại');
     if (!brand) throw new NotFoundException('Thương hiệu không tồn tại');
 
-    // 3. Tạo Product và Options
+    // 3. Tạo Product và Options (Nested Create)
     const { categoryIds, ...dataForCreate } = productData;
     const product = await this.prisma.product.create({
       data: {
@@ -149,23 +145,17 @@ export class ProductsService {
       },
     });
 
-    // [OPTIMIZATION-FIX]
-    // If we need options/skus for UI logic (e.g. color swatches), fetch them efficiently via Dataloader
-    // or keep them if paginated small size.
-    // For now, reducing payload size is the quick win.
-
-    // 4. Auto-generate SKUs (Delegated to SkuManager)
+    // 4. Tự động tạo SKUs (Giao cho SkuManager xử lý)
+    // SkuManager sẽ tạo tất cả các biến thể có thể (Red-S, Red-M, Blue-S, Blue-M...)
     await this.skuManager.generateSkusForNewProduct(product);
 
-    // [PLAN LIMIT] Increment cache usage
+    // [PLAN LIMIT] Tăng bộ đếm usage của tenant
     if (tenant) {
       await this.planUsageService.incrementUsage(tenant.id, 'products');
     }
 
-    // Invalidate product list cache
+    // Xóa cache danh sách sản phẩm để user thấy dữ liệu mới ngay lập tức
     await this.cacheService.invalidatePattern('products:filter:*');
-    // Also reset if unclear to be safe, or just trust the keys?
-    // User asked for specific invalidation. The above is specific.
 
     return product;
   }
@@ -178,8 +168,8 @@ export class ProductsService {
    * Lấy danh sách sản phẩm với bộ lọc nâng cao (Search, Filter, Sort, Pagination).
    */
   async findAll(query: FilterProductDto) {
-    // [P9 OPTIMIZATION] Canonicalize query to increase cache hits
-    // Ensures ?cat=1&brand=2 and ?brand=2&cat=1 use the same cache key
+    // [TỐI ƯU HÓA P9] Chuẩn hóa query (Canonicalization)
+    // Giúp đảm bảo ?cat=1&brand=2 và ?brand=2&cat=1 sẽ dùng chung 1 cache key
     const sortedQuery = Object.keys(query)
       .sort()
       .reduce(
@@ -200,7 +190,7 @@ export class ProductsService {
   }
 
   /**
-   * Internal method used by findAll for cache-aside
+   * Internal method: Truy vấn trực tiếp từ DB (Cache-aside pattern)
    */
   private async findAllFromDb(query: FilterProductDto) {
     const {
@@ -217,11 +207,10 @@ export class ProductsService {
 
     const skip = (page - 1) * limit;
 
-    // Xây dựng mệnh đề Where
+    // Xây dựng mệnh đề Where (Điều kiện lọc)
     const where: Prisma.ProductWhereInput = {
       AND: [
-        // 1. Search text (Tên hoặc Mô tả)
-        // 1. Search text (Full Text Search)
+        // 1. Search text (Full Text Search - Tiếng Việt không dấu/có dấu)
         search
           ? {
               OR: [
@@ -238,13 +227,13 @@ export class ProductsService {
               ],
             }
           : {},
-        // 1.1 Filter by IDs
+        // 1.1 Lọc theo danh sách ID cụ thể (dùng cho Cart/Wishlist)
         ids
           ? {
               id: { in: ids.split(',').map((id) => id.trim()) },
             }
           : {},
-        // 2. Filter theo Category (Many-to-Many)
+        // 2. Filter theo Category (Quan hệ Many-to-Many)
         categoryId
           ? {
               categories: {
@@ -256,7 +245,7 @@ export class ProductsService {
           : {},
         // 3. Filter theo Brand
         brandId ? { brandId } : {},
-        // 4. Filter theo khoảng giá (Optimized with cached columns)
+        // 4. Filter theo khoảng giá (Tối ưu bằng cột minPrice/maxPrice cache sẵn trong bảng Product)
         minPrice !== undefined || maxPrice !== undefined
           ? {
               AND: [
@@ -268,7 +257,7 @@ export class ProductsService {
       ],
     };
 
-    // Xây dựng Order By
+    // Xây dựng Order By (Sắp xếp)
     let orderBy: Prisma.ProductOrderByWithRelationInput = { createdAt: 'desc' }; // Mặc định: Mới nhất
 
     if (sort) {
@@ -410,29 +399,29 @@ export class ProductsService {
   }
 
   /**
-   * SEMANTIC SEARCH (Vector Search)
-   * Tìm kiếm sản phẩm tương đồng dựa trên ý nghĩa (embedding).
+   * SEMANTIC SEARCH (Tìm kiếm ngữ nghĩa)
+   * Tìm kiếm sản phẩm tương đồng dựa trên vector (embedding).
    */
   async searchSimilar(query: string, limit = 5) {
     try {
-      // 1. Generate Embedding from Query (using Google Generative AI)
+      // 1. Tạo Embedding từ Query của user (sử dụng Google Generative AI)
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
 
       const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
       const model = genAI.getGenerativeModel({ model: 'embedding-001' });
 
-      // Generate embedding for the user query
+      // Generate vector
       const result = await model.embedContent(query);
       const embedding = result.embedding.values;
 
       if (!embedding || embedding.length === 0) {
-        this.logger.warn('Failed to generate embedding for query');
+        this.logger.warn('Không thể tạo embedding cho query này');
         return [];
       }
 
-      // 2. Query Postgres with pgvector
-      // dbUrl needs to be respected if in Silo mode?
-      // Native Prisma doesn't support vector search fully in findMany yet without TypedSQL or Raw.
+      // 2. Truy vấn Postgres với pgvector (Tính khoảng cách vector)
+      // Prisma chưa hỗ trợ native vector search đầy đủ -> Dùng Raw SQL
+      // Toán tử <=> là tính khoảng cách cosine distance (gần nhất = 0)
 
       const vectorStr = `[${embedding.join(',')}]`;
 
@@ -447,7 +436,7 @@ export class ProductsService {
 
       return products;
     } catch (error) {
-      this.logger.error('Semantic search failed', error);
+      this.logger.error('Lỗi khi thực hiện semantic search', error);
       return [];
     }
   }
@@ -567,7 +556,8 @@ export class ProductsService {
   async update(id: string, updateProductDto: UpdateProductDto) {
     const { options, images, categoryIds, ...data } = updateProductDto;
 
-    // 0. [SMART MIGRATION SNAPSHOT] Capture old state before changes
+    // 0. [SMART MIGRATION SNAPSHOT] Chụp lại trạng thái cũ trước khi thay đổi
+    // Để so sánh và migrate SKU thông minh (VD: giữ nguyên giá/tồn kho nếu chỉ đổi tên Option)
     const oldProductState = await this.prisma.product.findFirst({
       where: { id },
       include: {
@@ -592,15 +582,15 @@ export class ProductsService {
         ),
       })) || [];
 
-    // 1. Update Basic Info & Options (Transaction)
+    // 1. Cập nhật Thông tin cơ bản & Options (Trong Transaction)
     await this.prisma.$transaction(async (tx) => {
-      // Update basic fields
-      await tx.product.update({
+      // Update các trường cơ bản (Tên, Mô tả...)
+      await this.prisma.product.update({
         where: { id },
         data: data,
       });
 
-      // Update categories if provided
+      // Update danh mục nếu có thay đổi
       if (updateProductDto.categoryIds) {
         await tx.productToCategory.deleteMany({ where: { productId: id } });
         await tx.product.update({
@@ -615,12 +605,12 @@ export class ProductsService {
         });
       }
 
-      // Update options if provided
+      // Update options nếu có thay đổi (CẤU TRÚC PHỨC TẠP)
       if (options) {
-        // Delete old options (cascade deletes values)
+        // Xóa options cũ (Cascade delete sẽ xóa values liên quan)
         await tx.productOption.deleteMany({ where: { productId: id } });
 
-        // Create new options
+        // Tạo options mới
         if (options.length > 0) {
           await tx.product.update({
             where: { id },
@@ -639,12 +629,12 @@ export class ProductsService {
         }
       }
 
-      // Update images if provided
+      // Update hình ảnh nếu có thay đổi
       if (images) {
-        // Delete old images
+        // Xóa ảnh cũ
         await tx.productImage.deleteMany({ where: { productId: id } });
 
-        // Create new images
+        // Tạo ảnh mới
         if (images.length > 0) {
           await tx.product.update({
             where: { id },
@@ -662,13 +652,14 @@ export class ProductsService {
       }
     });
 
-    // 2. Fetch fresh product state with new options
+    // 2. Lấy lại dữ liệu Product mới nhất kèm Options mới
     const freshProduct = await this.prisma.product.findFirst({
       where: { id },
       include: { options: { include: { values: true } } },
     });
 
-    // 3. Delegate SKU Sync/Migration to Manager
+    // 3. Kích hoạt SkuManager để đồng bộ lại danh sách SKU
+    // (Tạo SKU mới, Xóa SKU cũ, Migrate giá/tồn kho từ cái cũ sang cái mới)
     if (freshProduct) {
       await this.skuManager.smartSkuMigration(
         id,
@@ -677,11 +668,8 @@ export class ProductsService {
       );
     }
 
-    // [P1] Targeted Cache Invalidation with Warming
+    // [P1] Xóa cache cũ và làm nóng cache mới (Cache Warming)
     await this.invalidateProductCache(id);
-
-    return freshProduct;
-
     return freshProduct;
   }
 
@@ -704,9 +692,9 @@ export class ProductsService {
     return result;
   }
   /**
-   * Lấy thông tin chi tiết của nhiều SKU cùng lúc (Dùng cho Guest Cart)
+   * Lấy thông tin chi tiết của nhiều SKU cùng lúc (Dùng cho Cart/Checkout)
    *
-   * 🚀 OPTIMIZED: Sử dụng select để giảm deep nesting và over-fetching
+   * 🚀 TỐI ƯU HÓA: Sử dụng select cụ thể để giảm payload và tăng tốc độ query.
    */
   async getSkusByIds(skuIds: string[]) {
     const validIds = skuIds.filter((id) => id); // Remove null/undefined/empty
@@ -793,13 +781,13 @@ export class ProductsService {
   }
 
   /**
-   * [P1] Targeted Cache Invalidation with Warming
-   * Instead of waiting for next request to trigger slow fetch, we pre-warm Cache.
+   * [P1] Làm mới Cache Sản phẩm (Cache Warming)
+   * Thay vì chỉ xóa cache (khiến request tiếp theo bị chậm), ta chủ động fetch dữ liệu mới và set lại cache.
    */
   async invalidateProductCache(productId: string) {
     const cacheKey = `product:${productId}`;
 
-    // 1. Fetch Fresh Data (Warming)
+    // 1. Fetch Dữ liệu tươi (Fresh Data)
     const freshData = await this.findOne(productId).catch(() => null);
 
     if (freshData) {

@@ -1,3 +1,20 @@
+/**
+ * =====================================================================
+ * AUTH CONTROLLER - Cổng xác thực & Tài khoản
+ * =====================================================================
+ *
+ * 📚 GIẢI THÍCH CHO THỰC TẬP SINH:
+ *
+ * 1. HTTP-ONLY COOKIE:
+ * - Refresh Token được lưu trong `httpOnly` cookie để chống XSS (JavaScript không đọc được).
+ * - Access Token trả về verify body để Client dùng gọi API.
+ *
+ * 2. SECURITY FEATURES:
+ * - 2FA (Two-Factor Auth): Sinh QR Code, verify OTP.
+ * - Social Login: Google/Facebook OAuth2 callback xử lý ở đây.
+ * - Throttling: `@Throttle` giới hạn số lần thử login để chống Brute Force.
+ * =====================================================================
+ */
 import {
   BadRequestException,
   Body,
@@ -83,7 +100,14 @@ export class AuthController {
       req.ip || (req.headers['x-forwarded-for'] as string) || '0.0.0.0';
     const data = await this.authService.login(dto, fp, ip);
 
-    (res as Response).cookie('refreshToken', data.refreshToken, COOKIE_OPTIONS);
+    if ('refreshToken' in data) {
+      (res as Response).cookie(
+        'refreshToken',
+        data.refreshToken,
+        COOKIE_OPTIONS,
+      );
+    }
+
     return { data };
   }
 
