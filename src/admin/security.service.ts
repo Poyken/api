@@ -25,7 +25,10 @@
  *
  * 4. LƯU Ý BẢO MẬT:
  *    - Tất cả endpoint được bảo vệ bởi @Permissions('superAdmin:read/write')
- *    - IP whitelist được encrypt để tránh lộ thông tin nếu DB bị xâm nhập
+ *    - IP whitelist được encrypt để tránh lộ thông tin nếu DB bị xâm nhập *
+ * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
+ * - Tiếp nhận request từ Client, điều phối xử lý và trả về response.
+
  * =====================================================================
  */
 
@@ -68,14 +71,15 @@ export class SecurityService {
     };
   }
 
-  async setSystemLockdown(isEnabled: boolean) {
+  async setSystemLockdown(isEnabled: boolean, tenantId: string) {
     return this.prisma.featureFlag.upsert({
       where: { key: 'SYSTEM_LOCKDOWN' },
-      update: { isEnabled },
+      update: { isEnabled, tenantId },
       create: {
         key: 'SYSTEM_LOCKDOWN',
         isEnabled,
         description: 'Blocks all non-admin access to the platform',
+        tenantId,
       },
     });
   }

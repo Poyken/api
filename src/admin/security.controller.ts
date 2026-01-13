@@ -28,7 +28,10 @@
  *
  * 2. GUARDS BẢO VỆ:
  *    - JwtAuthGuard: Kiểm tra access token hợp lệ
- *    - PermissionsGuard + @Permissions(): Kiểm tra quyền superAdmin
+ *    - PermissionsGuard + @Permissions(): Kiểm tra quyền superAdmin *
+ * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
+ * - Tiếp nhận request từ Client, điều phối xử lý và trả về response.
+
  * =====================================================================
  */
 
@@ -65,8 +68,11 @@ export class SecurityController {
   @Post('lockdown')
   @RequirePermissions('superAdmin:write')
   @ApiOperation({ summary: 'Bật/tắt chế độ khóa hệ thống khẩn cấp' })
-  async toggleLockdown(@Body() body: { isEnabled: boolean }) {
-    const result = await this.securityService.setSystemLockdown(body.isEnabled);
+  async toggleLockdown(@Req() req: any, @Body() body: { isEnabled: boolean }) {
+    const result = await this.securityService.setSystemLockdown(
+      body.isEnabled,
+      req.user.tenantId,
+    );
     return { data: result };
   }
 

@@ -5,6 +5,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '@core/prisma/prisma.service';
+import {
+  CreatePaymentDto,
+  PaymentStrategy,
+} from './interfaces/payment-strategy.interface';
+import { CodPaymentStrategy } from './strategies/cod.strategy';
+import { MockStripeStrategy } from './strategies/mock-stripe.strategy';
+import { MoMoStrategy } from './strategies/momo.strategy';
+import { VNPayStrategy } from './strategies/vnpay.strategy';
+import { WebhookPayloadDto } from './dto/webhook-payload.dto';
 
 /**
  * =====================================================================
@@ -24,19 +33,13 @@ import { PrismaService } from '@core/prisma/prisma.service';
  *
  * 3. OPEN/CLOSED PRINCIPLE (Nguyên lý Đóng/Mở):
  * - Code "Mở" cho việc mở rộng: Muốn thêm Momo? Chỉ cần tạo class `MomoStrategy` và đăng ký vào Map.
- * - Code "Đóng" cho việc sửa đổi: Không cần sửa hàm `processPayment` hiện tại -> Giảm rủi ro bug.
+ * - Code "Đóng" cho việc sửa đổi: Không cần sửa hàm `processPayment` hiện tại -> Giảm rủi ro bug. *
+ * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
+ * - Payment Abstraction: Che giấu sự phức tạp của từng cổng thanh toán (VNPAY, Momo, Stripe) dưới một giao diện thống nhất `processPayment`.
+ * - Runtime Flexibility: Dễ dàng cấu hình bật/tắt các cổng thanh toán (chỉ cần xóa khỏi Map) mà không cần sửa logic xử lý đơn hàng.
+ *
  * =====================================================================
  */
-import {
-  CreatePaymentDto,
-  PaymentStrategy,
-} from './interfaces/payment-strategy.interface';
-import { CodPaymentStrategy } from './strategies/cod.strategy';
-import { MockStripeStrategy } from './strategies/mock-stripe.strategy';
-import { MoMoStrategy } from './strategies/momo.strategy';
-import { VNPayStrategy } from './strategies/vnpay.strategy';
-import { VietQrStrategy } from './strategies/vietqr.strategy';
-import { WebhookPayloadDto } from './dto/webhook-payload.dto';
 
 @Injectable()
 export class PaymentService {
@@ -49,14 +52,12 @@ export class PaymentService {
     private readonly mockStripeStrategy: MockStripeStrategy,
     private readonly vnPayStrategy: VNPayStrategy,
     private readonly momoStrategy: MoMoStrategy,
-    private readonly vietQrStrategy: VietQrStrategy,
   ) {
     // Đăng ký các chiến lược
     this.strategies.set('COD', codStrategy);
     this.strategies.set('CREDIT_CARD', mockStripeStrategy); // Ánh xạ CREDIT_CARD sang Stripe
     this.strategies.set('VNPAY', vnPayStrategy);
     this.strategies.set('MOMO', momoStrategy);
-    this.strategies.set('VIETQR', vietQrStrategy);
   }
 
   /**

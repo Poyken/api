@@ -10,7 +10,10 @@
  * - Controller này giúp Admin tra cứu lại lịch sử để truy vết lỗi hoặc hành vi gian lận.
  *
  * 2. PERMISSIONS:
- * - Chỉ user có quyền `auditLog:read` mới được xem.
+ * - Chỉ user có quyền `auditLog:read` mới được xem. *
+ * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
+ * - Tiếp nhận request từ Client, điều phối xử lý và trả về response.
+
  * =====================================================================
  */
 import {
@@ -38,6 +41,7 @@ export class AuditController {
     @Query('limit') limit: string = '10',
     @Query('search') search?: string,
     @Query('roles') roles?: string,
+    @Query('filter') filter?: string,
   ) {
     const rolesArray = roles ? roles.split(',') : undefined;
     const result = await this.auditService.findAll(
@@ -45,6 +49,7 @@ export class AuditController {
       +limit,
       search,
       rolesArray,
+      filter,
     );
     return result; // Result already has { data, meta }
   }
