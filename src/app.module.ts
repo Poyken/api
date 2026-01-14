@@ -96,6 +96,16 @@ import { SentryModule } from '@core/sentry/sentry.module';
 import { DataLoaderModule } from '@core/dataloader/dataloader.module';
 import { MetricsModule } from '@core/metrics/metrics.module';
 import { SuperAdminModule } from '@/super-admin/super-admin.module';
+import { ReturnRequestsModule } from './return-requests/return-requests.module';
+import { ProcurementModule } from './procurement/procurement.module';
+import { FulfillmentModule } from './fulfillment/fulfillment.module';
+import { TaxModule } from './tax/tax.module';
+import { LoyaltyModule } from './loyalty/loyalty.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
+import { DevToolsModule } from './dev-tools/dev-tools.module';
+import { SubscriptionModule } from './subscription/subscription.module';
+import { ReportsModule } from './reports/reports.module';
+import { InventoryAlertsModule } from './inventory-alerts/inventory-alerts.module';
 
 @Module({
   imports: [
@@ -253,6 +263,17 @@ import { SuperAdminModule } from '@/super-admin/super-admin.module';
     InventoryModule,
     MediaModule,
     CustomerGroupsModule,
+    ReturnRequestsModule,
+    ProcurementModule,
+    FulfillmentModule,
+    TaxModule,
+    LoyaltyModule,
+    WebhooksModule,
+    DevToolsModule,
+    AnalyticsModule,
+    SubscriptionModule,
+    ReportsModule,
+    InventoryAlertsModule,
   ],
   controllers: [HealthController],
   providers: [
