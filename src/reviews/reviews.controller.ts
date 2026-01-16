@@ -37,7 +37,9 @@ import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
+import { FilterReviewDto } from './dto/filter-review.dto';
 import { ReviewsService } from './reviews.service';
+import { AiSentimentService } from './ai-sentiment.service';
 import { GetUser } from '@/auth/decorators/get-user.decorator';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { PermissionsGuard } from '@/auth/permissions.guard';
@@ -63,26 +65,15 @@ export class ReviewsController {
   constructor(
     private readonly reviewsService: ReviewsService,
     private readonly cloudinaryService: CloudinaryService,
+    private readonly aiSentimentService: AiSentimentService,
   ) {}
 
   @Get()
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions('review:read')
   @ApiListResponse('Review', { summary: 'Get all reviews (Admin)' })
-  async findAll(
-    @Query('page') page = 1,
-    @Query('limit') limit = 10,
-    @Query('rating') rating?: number,
-    @Query('status') status?: string,
-    @Query('search') search?: string,
-  ) {
-    return this.reviewsService.findAll(
-      Number(page),
-      Number(limit),
-      rating ? Number(rating) : undefined,
-      status,
-      search,
-    );
+  async findAll(@Query() query: FilterReviewDto) {
+    return this.reviewsService.findAll(query);
   }
 
   @Post()
@@ -92,8 +83,7 @@ export class ReviewsController {
     @GetUser('id') userId: string,
     @Body() createReviewDto: CreateReviewDto,
   ) {
-    const data = await this.reviewsService.create(userId, createReviewDto);
-    return { data };
+    return this.reviewsService.create(userId, createReviewDto);
   }
 
   @Get('check-eligibility')
@@ -104,11 +94,7 @@ export class ReviewsController {
     @Query('productId') productId: string,
   ) {
     try {
-      const data = await this.reviewsService.checkEligibility(
-        userId,
-        productId,
-      );
-      return { data };
+      return this.reviewsService.checkEligibility(userId, productId);
     } catch (e) {
       console.error('[CheckEligibility Error]', e);
       throw e;
@@ -130,21 +116,70 @@ export class ReviewsController {
     );
   }
 
+  // =====================================================================
+  // AI SENTIMENT ENDPOINTS
+  // =====================================================================
+
+  @Get('product/:productId/sentiment')
+  @Cached(300) // 5 minutes
+  @ApiOperation({ summary: 'Lấy thống kê sentiment của sản phẩm (AI)' })
+  async getProductSentiment(@Param('productId') productId: string) {
+    const [stats, topTags] = await Promise.all([
+      this.aiSentimentService.getProductSentimentStats(productId),
+      this.aiSentimentService.getProductTopTags(productId),
+    ]);
+    return { data: { stats, topTags } };
+  }
+
+  @Get('product/:productId/insights')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('review:read')
+  @Cached(600) // 10 minutes
+  @ApiOperation({ summary: 'Lấy AI insights cho sản phẩm (Admin)' })
+  async getProductInsights(@Param('productId') productId: string) {
+    const insights =
+      await this.aiSentimentService.generateProductInsights(productId);
+    return { data: { insights } };
+  }
+
+  @Post('analyze-batch')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('review:update')
+  @ApiOperation({
+    summary: 'Phân tích hàng loạt reviews chưa có sentiment (Admin)',
+  })
+  async analyzeUnanalyzedReviews(@Query('limit') limit = 20) {
+    const unanalyzed = await this.aiSentimentService.getUnanalyzedReviews(
+      Number(limit),
+    );
+    const results = await this.aiSentimentService.analyzeMultipleReviews(
+      unanalyzed.map((r) => r.id),
+    );
+    return {
+      data: {
+        analyzed: Object.keys(results).length,
+        remaining: unanalyzed.length - Object.keys(results).length,
+      },
+    };
+  }
+
+  // =====================================================================
+  // OTHER ENDPOINTS
+  // =====================================================================
+
   @Delete(':id')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions('review:delete')
   @ApiDeleteResponse('Review', { summary: 'Xóa đánh giá (Admin)' })
   async remove(@Param('id') id: string) {
-    const data = await this.reviewsService.remove(id);
-    return { data };
+    return this.reviewsService.remove(id);
   }
 
   @Delete('mine/:id')
   @UseGuards(JwtAuthGuard)
   @ApiDeleteResponse('Review', { summary: 'Xóa đánh giá của tôi' })
   async removeOwn(@GetUser('id') userId: string, @Param('id') id: string) {
-    const data = await this.reviewsService.removeOwn(userId, id);
-    return { data };
+    return this.reviewsService.removeOwn(userId, id);
   }
 
   @Patch(':id/status')
@@ -155,8 +190,7 @@ export class ReviewsController {
     @Param('id') id: string,
     @Body('isApproved') isApproved: boolean,
   ) {
-    const data = await this.reviewsService.updateStatus(id, isApproved);
-    return { data };
+    return this.reviewsService.updateStatus(id, isApproved);
   }
 
   @Patch(':id')
@@ -167,8 +201,7 @@ export class ReviewsController {
     @Param('id') id: string,
     @Body() updateReviewDto: UpdateReviewDto,
   ) {
-    const data = await this.reviewsService.update(userId, id, updateReviewDto);
-    return { data };
+    return this.reviewsService.update(userId, id, updateReviewDto);
   }
 
   @Post('upload')
@@ -181,7 +214,7 @@ export class ReviewsController {
       files.map((file) => this.cloudinaryService.uploadImage(file)),
     );
     const urls = uploaded.map((res) => res.secure_url);
-    return { data: urls };
+    return urls;
   }
 
   @Post(':id/reply')
@@ -189,7 +222,6 @@ export class ReviewsController {
   @RequirePermissions('review:update')
   @ApiUpdateResponse('Review', { summary: 'Trả lời đánh giá (Admin)' })
   async reply(@Param('id') id: string, @Body('reply') reply: string) {
-    const data = await this.reviewsService.replyToReview(id, reply);
-    return { data };
+    return this.reviewsService.replyToReview(id, reply);
   }
 }

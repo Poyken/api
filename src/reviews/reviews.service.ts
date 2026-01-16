@@ -9,6 +9,9 @@ import type { Cache } from 'cache-manager';
 import { BaseCrudService } from '../common/base-crud.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
+import { AiSentimentService } from './ai-sentiment.service';
+import { FilterReviewDto } from './dto/filter-review.dto';
+import { createPaginatedResult } from '@/common/dto/base.dto';
 
 /**
  * =====================================================================
@@ -43,6 +46,7 @@ export class ReviewsService extends BaseCrudService<
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
     private readonly notificationsGateway: NotificationsGateway,
+    private readonly aiSentimentService: AiSentimentService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {
     super(ReviewsService.name);
@@ -115,7 +119,7 @@ export class ReviewsService extends BaseCrudService<
       whereOrderItems.skuId = dto.skuId;
     }
 
-    const orderHistory = await this.prisma.order.findFirst({
+    const orderHistory = await (this.prisma.order as any).findFirst({
       where: {
         userId,
         status: 'DELIVERED',
@@ -133,7 +137,7 @@ export class ReviewsService extends BaseCrudService<
 
     /* Transaction đảm bảo tính nhất quán: Tạo review -> Cập nhật điểm rating của Product ngay lập tức */
     const review = await this.prisma.$transaction(async (tx) => {
-      const newReview = await tx.review.create({
+      const newReview = await (tx.review as any).create({
         data: {
           userId,
           productId: dto.productId,
@@ -151,6 +155,17 @@ export class ReviewsService extends BaseCrudService<
       return newReview;
     });
 
+    // AI Sentiment Analysis (async, không block response)
+    if (dto.content && this.aiSentimentService.enabled) {
+      this.aiSentimentService
+        .analyzeReview(review.id, dto.content, dto.rating)
+        .catch((err) => {
+          this.logger.error(
+            `AI analysis failed for review ${review.id}: ${err.message}`,
+          );
+        });
+    }
+
     return review;
   }
 
@@ -159,7 +174,7 @@ export class ReviewsService extends BaseCrudService<
     if (!productId) {
       throw new BadRequestException('productId is required');
     }
-    const orderItems = await this.prisma.orderItem.findMany({
+    const orderItems = await (this.prisma.orderItem as any).findMany({
       where: {
         order: {
           userId,
@@ -234,7 +249,7 @@ export class ReviewsService extends BaseCrudService<
    * - Trả về kèm thông tin người dùng và biến thể sản phẩm họ đã mua.
    */
   async findAllByProduct(productId: string, cursor?: string, limit = 10) {
-    const reviews = await this.model.findMany({
+    const reviews = await (this.model as any).findMany({
       where: { productId, isApproved: true },
       take: limit + 1,
       skip: cursor ? 1 : 0,
@@ -286,7 +301,7 @@ export class ReviewsService extends BaseCrudService<
       nextCursor = nextItem!.id;
     }
 
-    const productStats = await this.prisma.product.findUnique({
+    const productStats = await (this.prisma.product as any).findUnique({
       where: { id: productId },
       select: { avgRating: true, reviewCount: true },
     });
@@ -302,15 +317,14 @@ export class ReviewsService extends BaseCrudService<
   }
 
   /* ... Generic findAll cho Admin ... */
-  async findAll(
-    page: number,
-    limit: number,
-    rating?: number,
-    status?: string,
-    search?: string,
-  ) {
+  async findAll(query: FilterReviewDto) {
+    const { page = 1, limit = 10, rating, status, search } = query;
+    const skip = (page - 1) * limit;
+
     // Xây dựng bộ lọc tùy chỉnh
-    const where: any = {};
+    const where: any = {
+      deletedAt: null,
+    };
     if (rating) where.rating = rating;
     if (status) {
       if (status === 'published') where.isApproved = true;
@@ -326,24 +340,29 @@ export class ReviewsService extends BaseCrudService<
       ];
     }
 
-    return this.findAllBase(
-      page,
-      limit,
-      where,
-      {
-        user: { select: { firstName: true, lastName: true, email: true } },
-        product: { select: { id: true, name: true } },
-        sku: { select: { id: true, skuCode: true } },
-      },
-      { createdAt: 'desc' },
-    );
+    const [items, total] = await Promise.all([
+      (this.model as any).findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          user: { select: { firstName: true, lastName: true, email: true } },
+          product: { select: { id: true, name: true } },
+          sku: { select: { id: true, skuCode: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      (this.model as any).count({ where }),
+    ]);
+
+    return createPaginatedResult(items, total, page, limit);
   }
 
   async updateStatus(id: string, isApproved: boolean) {
     const review = await this.findOneBase(id);
 
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.review.update({
+      const updated = await (tx.review as any).update({
         where: { id },
         data: { isApproved },
       });
@@ -362,7 +381,7 @@ export class ReviewsService extends BaseCrudService<
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const updatedReview = await tx.review.update({
+      const updatedReview = await (tx.review as any).update({
         where: { id },
         data: {
           rating: dto.rating,
@@ -381,9 +400,9 @@ export class ReviewsService extends BaseCrudService<
     const review = await this.findOneBase(id);
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.review.update({
+      await (tx.review as any).update({
         where: { id },
-        data: { deletedAt: new Date() },
+        data: { deletedAt: new Date() } as any,
       });
       await this.updateProductRatingCache(review.productId, tx);
     });
@@ -399,9 +418,9 @@ export class ReviewsService extends BaseCrudService<
     }
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.review.update({
+      await (tx.review as any).update({
         where: { id },
-        data: { deletedAt: new Date() },
+        data: { deletedAt: new Date() } as any,
       });
       await this.updateProductRatingCache(review.productId, tx);
     });

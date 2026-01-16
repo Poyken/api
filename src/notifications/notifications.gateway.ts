@@ -1,4 +1,4 @@
-import { Logger } from '@nestjs/common';
+import { Logger, Inject, forwardRef } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
   OnGatewayConnection,
@@ -61,6 +61,7 @@ export class NotificationsGateway
 
   constructor(
     private readonly jwtService: JwtService,
+    @Inject(forwardRef(() => NotificationsService))
     private readonly notificationsService: NotificationsService,
   ) {}
 
@@ -172,7 +173,10 @@ export class NotificationsGateway
   /**
    * PUBLIC METHOD: Gửi thông báo mới đến user (được gọi từ service khác)
    */
-  sendNotificationToUser(userId: string, notification: any) {
+  sendNotificationToUser(
+    userId: string,
+    notification: Record<string, unknown>,
+  ) {
     // Emit vào room của user
     this.server.to(`user:${userId}`).emit('new_notification', notification);
 
@@ -187,7 +191,7 @@ export class NotificationsGateway
   /**
    * PUBLIC METHOD: Broadcast thông báo đến tất cả users đang online
    */
-  broadcastNotification(notification: any) {
+  broadcastNotification(notification: Record<string, unknown>) {
     this.server.emit('new_notification', notification);
     this.logger.debug('[WS] Broadcasted notification to all users');
   }
