@@ -45,7 +45,7 @@ import { TwoFactorService } from './two-factor.service';
  * - Mật khẩu LUÔN được hash bằng `bcrypt` trước khi lưu DB.
  * - Refresh Token cũng được quản lý chặt chẽ kèm Fingerprint thiết bị. *
  * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
- * - Tiếp nhận request từ Client, điều phối xử lý và trả về response.
+ * - Bảo vệ cổng vào của hệ thống, cấp thẻ bài (Token) cho người dùng hợp lệ và đảm bảo tính bảo mật mật khẩu bằng các thuật toán mã hóa hiện đại.
 
  * =====================================================================
  */
@@ -371,7 +371,7 @@ export class AuthService {
     permissions: string[],
   ) {
     const isSuperAdmin = roles.includes('SUPERADMIN');
-    const hasPlatformControl = permissions.includes('superAdmin:read');
+    const hasPlatformControl = permissions.includes('super-admin:read');
 
     // PLATFORM ADMIN = Super Admin + Có quyền hệ thống.
     // Được phép truy cập mọi Tenant và trang quản trị tổng (Global Portal).
@@ -640,6 +640,19 @@ export class AuthService {
         `Tên miền email không hợp lệ: ${email.split('@')[1]}`,
       );
     }
+  }
+
+  /**
+   * Internal Helper: Retrieve raw user by ID with secrets (password, 2FA secret).
+   * DO NOT Expose this to Controller Response.
+   */
+  async getUserWithSecrets(userId: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId },
+      select: this.USER_PERMISSION_SELECT,
+    });
+    if (!user) throw new NotFoundException('User not found');
+    return user;
   }
 
   async forgotPassword(email: string) {

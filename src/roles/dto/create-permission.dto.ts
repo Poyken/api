@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 
 /**
  * =====================================================================
@@ -15,17 +15,13 @@ import { IsNotEmpty, IsString } from 'class-validator';
  * 2. GRANULARITY (Độ chi tiết):
  * - Mỗi Permission nên đại diện cho một hành động duy nhất trên một tài nguyên duy nhất. *
  * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
- * - Tiếp nhận request từ Client, điều phối xử lý và trả về response.
+ * - Xử lý logic nghiệp vụ, phối hợp các service liên quan để hoàn thành yêu cầu từ Controller.
 
  * =====================================================================
  */
 
-export class CreatePermissionDto {
-  @ApiProperty({
-    description: 'Permission name in format resource:action',
-    example: 'product:create',
-  })
-  @IsNotEmpty()
-  @IsString()
-  name: string;
-}
+const CreatePermissionSchema = z.object({
+  name: z.string().min(1, 'Name is required').describe('product:create'),
+});
+
+export class CreatePermissionDto extends createZodDto(CreatePermissionSchema) {}

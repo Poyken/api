@@ -1,6 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { User } from '@prisma/client';
-import { Exclude, Expose } from 'class-transformer';
+import { User, UserRole } from '@prisma/client';
 
 /**
  * =====================================================================
@@ -10,23 +9,21 @@ import { Exclude, Expose } from 'class-transformer';
  * 📚 GIẢI THÍCH CHO THỰC TẬP SINH:
  *
  * 1. DATA SERIALIZATION (Tuần tự hóa dữ liệu):
- * - Khi trả về dữ liệu cho Client, ta không muốn lộ các thông tin nhạy cảm.
- * - `@Exclude()`: Đánh dấu các trường cần ẩn đi (VD: `password`).
- * - `@Expose()`: Đánh dấu các trường cần hiển thị, hoặc tạo ra các trường ảo (Virtual Fields).
+ * - DTO này đóng gói dữ liệu trả về cho Client.
+ * - Không chứa password hay các field nhạy cảm.
+ * - Các field roles/permissions được làm phẳng (Flatten) để dễ sử dụng.
  *
- * 2. VIRTUAL FIELDS (Trường ảo):
- * - `flattenedRoles` và `flattenedPermissions`: Đây không phải là các cột trong Database.
- * - Chúng được tính toán (Flatten) từ các quan hệ phức tạp của Prisma để trả về một mảng chuỗi đơn giản cho Frontend dễ xử lý.
+ * 2. NO CLASS-TRANSFORMER:
+ * - Chúng ta gán dữ liệu thủ công trong constructor để đảm bảo an toàn và minh bạch.
+ * - Không phụ thuộc vào decorator ma thuật.
  *
- * 3. CLASS TRANSFORMER:
- * - NestJS sử dụng thư viện `class-transformer` để tự động thực hiện việc chuyển đổi này dựa trên các Decorator ta đã khai báo. *
  * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
- * - Tiếp nhận request từ Client, điều phối xử lý và trả về response.
-
+ * - Xử lý logic nghiệp vụ, phối hợp các service liên quan để hoàn thành yêu cầu từ Controller.
+ *
  * =====================================================================
  */
 
-export class UserEntity implements Partial<User> {
+export class UserEntity {
   @ApiProperty()
   id: string;
 
@@ -42,24 +39,8 @@ export class UserEntity implements Partial<User> {
   @ApiProperty()
   avatarUrl: string | null;
 
-  @Exclude()
-  password: string | null;
-
   @ApiProperty()
   twoFactorEnabled: boolean;
-
-  @Exclude()
-  twoFactorSecret: string | null;
-
-  // 1. Ẩn dữ liệu thô từ Prisma
-  @Exclude()
-  roles: any[];
-
-  @Exclude()
-  permissions: any[];
-
-  @Exclude()
-  addresses: any[];
 
   @ApiProperty()
   createdAt: Date;
@@ -67,52 +48,47 @@ export class UserEntity implements Partial<User> {
   @ApiProperty()
   updatedAt: Date;
 
-  constructor(partial: Partial<UserEntity>) {
-    Object.assign(this, partial);
-    // Explicitly map relations if needed, but for simplicity:
-    if (partial.roles) {
-      this.roles = partial.roles.map((r) => r.role?.name || r);
-    }
-    // The original constructor had explicit assignments for roles and permissions
-    // which are now handled by the `if (partial.roles)` block and the new type definition.
-    // No need for `this.permissions = partial?.permissions;` here as it's handled by Object.assign
-    // and the getter will process the raw data if it's still an array of objects.
+  @ApiProperty({ type: [String] })
+  roles: string[];
+
+  @ApiProperty({ type: [String] })
+  permissions: string[];
+
+  constructor(partial: Partial<User> & { roles?: any[]; permissions?: any[] }) {
+    this.id = partial.id || '';
+    this.email = partial.email || '';
+    this.firstName = partial.firstName || null;
+    this.lastName = partial.lastName || null;
+    this.avatarUrl = partial.avatarUrl || null;
+    this.twoFactorEnabled = partial.twoFactorEnabled ?? false;
+    this.createdAt = partial.createdAt || new Date();
+    this.updatedAt = partial.updatedAt || new Date();
+
+    // Map Roles
+    this.roles = this.mapRoles(partial.roles);
+    this.permissions = this.mapPermissions(partial.permissions, partial.roles);
   }
 
-  // 2. Tính toán Roles cho đầu ra JSON
-  @ApiProperty({ type: [String] })
-  @Expose({ name: 'roles' })
-  get flattenedRoles(): string[] {
-    if (!this.roles || !Array.isArray(this.roles)) return [];
-
-    return this.roles
-      .map((r: any) => {
-        // Xử lý đối tượng UserRole hoặc chuỗi trực tiếp
-        // r.role.name kiểm tra quan hệ lồng nhau
-        // r.name kiểm tra đối tượng role trực tiếp (ít có khả năng ở đây nhưng là dự phòng tốt)
-        // r là chuỗi
+  private mapRoles(roles: any[] = []): string[] {
+    if (!Array.isArray(roles)) return [];
+    return roles
+      .map((r) => {
         const roleName = r.role?.name || r.name || r;
         return typeof roleName === 'string' ? roleName : null;
       })
       .filter((r): r is string => Boolean(r));
   }
 
-  // 3. Tính toán Permissions cho đầu ra JSON
-  @ApiProperty({ type: [String] })
-  @Expose({ name: 'permissions' })
-  get flattenedPermissions(): string[] {
-    // A. Quyền trực tiếp
-    const directPerms =
-      this.permissions && Array.isArray(this.permissions)
-        ? this.permissions
-            .map((p: any) => p.permission?.name || p.name || p)
-            .filter((p) => typeof p === 'string')
-        : [];
+  private mapPermissions(permissions: any[] = [], roles: any[] = []): string[] {
+    const directPerms = Array.isArray(permissions)
+      ? permissions
+          .map((p: any) => p.permission?.name || p.name || p)
+          .filter((p) => typeof p === 'string')
+      : [];
 
-    // B. Quyền từ Role
     let rolePerms: string[] = [];
-    if (this.roles && Array.isArray(this.roles)) {
-      rolePerms = this.roles
+    if (Array.isArray(roles)) {
+      rolePerms = roles
         .flatMap(
           (ur: any) =>
             ur.role?.permissions?.map((rp: any) => rp.permission?.name) || [],
@@ -120,7 +96,6 @@ export class UserEntity implements Partial<User> {
         .filter(Boolean);
     }
 
-    // C. Kết hợp & Duy nhất
     return [...new Set([...directPerms, ...rolePerms])];
   }
 }

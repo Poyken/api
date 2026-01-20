@@ -13,41 +13,33 @@ import { AiChatService } from './ai-chat.service';
 
 /**
  * =====================================================================
- * AI CHAT CONTROLLER - API endpoints cho tính năng chat AI
+ * AI CHAT CONTROLLER - CỔNG TIẾP NHẬN TRUY VẤN KHÁCH HÀNG
  * =====================================================================
  *
  * 📚 GIẢI THÍCH CHO THỰC TẬP SINH:
  *
  * 1. OPTIONAL AUTH (`OptionalJwtAuthGuard`):
- * - Khác với `JwtAuthGuard` thông thường yêu cầu phải đăng nhập.
- * - Optional guard cho phép cả guest và logged-in user truy cập.
- * - Nếu có token, req.user sẽ có data; nếu không, req.user = undefined.
+ * - Cho phép cả khách vãng lai (Guest) và User đã đăng nhập sử dụng Chatbot.
+ * - Guest dùng `guestId` để lưu lịch sử, User dùng `userId`.
  *
- * 2. RATE LIMITING (`@Throttle`):
- * - Giới hạn số request/thời gian để tránh lạm dụng API.
- * - Guest: 10 requests/minute
- * - Logged-in: 30 requests/minute
+ * 2. RATE LIMITING (Chặn Spam):
+ * - Sử dụng `@Throttle` để giới hạn số lượt chat mỗi phút.
+ * - AI API (Gemini) tốn tiền/resource, nên phải chặn các bot cào dữ liệu hoặc người dùng spam câu hỏi liên tục.
  *
- * 3. DTO VALIDATION:
- * - `SendMessageDto`: Validate tin nhắn từ client
- * - Sử dụng class-validator để đảm bảo data hợp lệ *
  * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
- * - Tiếp nhận request từ Client, điều phối xử lý và trả về response.
-
+ * - Nhân viên tư vấn 24/7. Trả lời ngay lập tức các thắc mắc về sản phẩm, giá cả và chính sách cửa hàng bất kể ngày đêm.
  * =====================================================================
  */
 
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 
-class SendMessageDto {
-  @IsString()
-  @IsNotEmpty()
-  message: string;
+const SendMessageSchema = z.object({
+  message: z.string().min(1),
+  guestId: z.string().optional(),
+});
 
-  @IsString()
-  @IsOptional()
-  guestId?: string; // UUID from localStorage for guest users
-}
+class SendMessageDto extends createZodDto(SendMessageSchema) {}
 
 @ApiTags('AI Chat')
 @Controller('ai-chat')

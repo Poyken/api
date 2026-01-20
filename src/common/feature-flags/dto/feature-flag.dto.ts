@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 
 /**
  * =====================================================================
@@ -17,43 +17,20 @@ import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
  * - `isEnabled` là công tắc tổng. Nếu `false`, tính năng tắt hoàn toàn.
  * - Nếu `true`, hệ thống mới xét tiếp đến `rules` để quyết định bật cho ai. *
  * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
- * - Tiếp nhận request từ Client, điều phối xử lý và trả về response.
+ * - Xử lý logic nghiệp vụ, phối hợp các service liên quan để hoàn thành yêu cầu từ Controller.
 
  * =====================================================================
  */
-export class CreateFeatureFlagDto {
-  @ApiProperty({ example: 'new_checkout_flow' })
-  @IsString()
-  @IsNotEmpty()
-  key: string;
+const CreateFeatureFlagSchema = z.object({
+  key: z.string().min(1).describe('new_checkout_flow'),
+  description: z.string().optional().describe('Enable the new checkout UI'),
+  isEnabled: z.boolean().optional().default(false),
+  rules: z.any().optional().describe('{ "percentage": 50 }'),
+});
+export class CreateFeatureFlagDto extends createZodDto(
+  CreateFeatureFlagSchema,
+) {}
 
-  @ApiProperty({ example: 'Enable the new checkout UI' })
-  @IsString()
-  @IsOptional()
-  description?: string;
-
-  @ApiProperty({ example: false })
-  @IsBoolean()
-  @IsOptional()
-  isEnabled?: boolean;
-
-  @ApiProperty({ example: { percentage: 50 } })
-  @IsOptional()
-  rules?: any;
-}
-
-export class UpdateFeatureFlagDto {
-  @ApiProperty({ example: 'Enable the new checkout UI' })
-  @IsString()
-  @IsOptional()
-  description?: string;
-
-  @ApiProperty({ example: true })
-  @IsBoolean()
-  @IsOptional()
-  isEnabled?: boolean;
-
-  @ApiProperty({ example: { percentage: 100 } })
-  @IsOptional()
-  rules?: any;
-}
+export class UpdateFeatureFlagDto extends createZodDto(
+  CreateFeatureFlagSchema.partial(),
+) {}

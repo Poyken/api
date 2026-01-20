@@ -1,10 +1,5 @@
-import {
-  IsArray,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  MaxLength,
-} from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 
 /**
  * =====================================================================
@@ -26,50 +21,21 @@ import {
  * - `productIds`: Bài viết có thể "gắn" (tag) các sản phẩm liên quan để User click mua ngay.
  *   Dùng mảng UUID string. *
  * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
- * - Tiếp nhận request từ Client, điều phối xử lý và trả về response.
+ * - Xử lý logic nghiệp vụ, phối hợp các service liên quan để hoàn thành yêu cầu từ Controller.
 
  * =====================================================================
  */
-export class CreateBlogDto {
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(255)
-  title: string;
+const CreateBlogSchema = z.object({
+  title: z.string().min(1).max(255),
+  slug: z.string().min(1),
+  excerpt: z.string().min(1),
+  content: z.string().min(1),
+  image: z.string().optional(),
+  category: z.string().min(1),
+  author: z.string().optional(),
+  language: z.string().optional().describe("'en' or 'vi'"),
+  readTime: z.string().optional(),
+  productIds: z.array(z.string()).optional(),
+});
 
-  @IsString()
-  @IsNotEmpty()
-  slug: string;
-
-  @IsString()
-  @IsNotEmpty()
-  excerpt: string;
-
-  @IsString()
-  @IsNotEmpty()
-  content: string;
-
-  @IsString()
-  @IsOptional()
-  image?: string;
-
-  @IsString()
-  @IsNotEmpty()
-  category: string;
-
-  @IsString()
-  @IsOptional()
-  author: string;
-
-  @IsString()
-  @IsOptional()
-  language?: string; // 'en' or 'vi'
-
-  @IsString()
-  @IsOptional()
-  readTime?: string;
-
-  @IsArray()
-  @IsString({ each: true })
-  @IsOptional()
-  productIds?: string[]; // Featured products
-}
+export class CreateBlogDto extends createZodDto(CreateBlogSchema) {}

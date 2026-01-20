@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty } from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 
 /**
  * =====================================================================
@@ -18,17 +18,17 @@ import { IsEmail, IsNotEmpty } from 'class-validator';
  * 3. PROCESS FLOW:
  * - Sau khi nhận được email hợp lệ, server sẽ tạo một Token và gửi vào email này để người dùng có thể thực hiện bước `reset-password`. *
  * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
- * - Tiếp nhận request từ Client, điều phối xử lý và trả về response.
+ * - Xử lý logic nghiệp vụ, phối hợp các service liên quan để hoàn thành yêu cầu từ Controller.
 
  * =====================================================================
  */
 
-export class ForgotPasswordDto {
-  @ApiProperty({
-    example: 'admin@example.com',
-    description: 'Email của tài khoản cần khôi phục mật khẩu',
-  })
-  @IsEmail({}, { message: 'Email không hợp lệ' })
-  @IsNotEmpty({ message: 'Email không được để trống' })
-  email: string;
-}
+const ForgotPasswordSchema = z.object({
+  email: z
+    .string()
+    .min(1, 'Email không được để trống')
+    .email('Email không hợp lệ')
+    .describe('admin@example.com'),
+});
+
+export class ForgotPasswordDto extends createZodDto(ForgotPasswordSchema) {}

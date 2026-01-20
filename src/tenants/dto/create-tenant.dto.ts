@@ -17,50 +17,24 @@
  *    - @IsOptional(): Field không bắt buộc
  *    - @ApiProperty(): Tài liệu Swagger *
  * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
- * - Tiếp nhận request từ Client, điều phối xử lý và trả về response.
+ * - Xử lý logic nghiệp vụ, phối hợp các service liên quan để hoàn thành yêu cầu từ Controller.
 
  * =====================================================================
  */
 
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsEnum,
-  IsNotEmpty,
-  IsObject,
-  IsOptional,
-  IsString,
-} from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 
-export class CreateTenantDto {
-  @ApiProperty({ example: 'Furniture Store' })
-  @IsString()
-  @IsNotEmpty()
-  name: string;
+const CreateTenantSchema = z.object({
+  name: z.string().min(1, 'Name is required').describe('Furniture Store'),
+  domain: z.string().min(1, 'Domain is required').describe('furniture.local'),
+  plan: z.enum(['BASIC', 'PRO', 'ENTERPRISE']).describe('BASIC'),
+  themeConfig: z
+    .record(z.string(), z.any())
+    .optional()
+    .describe('Theme config object'),
+  adminEmail: z.string().optional().describe('admin@example.com'),
+  adminPassword: z.string().optional().describe('password123'),
+});
 
-  @ApiProperty({ example: 'furniture.local' })
-  @IsString()
-  @IsNotEmpty()
-  domain: string;
-
-  @ApiProperty({
-    example: 'BASIC',
-    enum: ['BASIC', 'PRO', 'ENTERPRISE'],
-  })
-  @IsEnum(['BASIC', 'PRO', 'ENTERPRISE'])
-  plan: 'BASIC' | 'PRO' | 'ENTERPRISE';
-
-  @ApiPropertyOptional({ example: { primaryColor: '#000000' } })
-  @IsObject()
-  @IsOptional()
-  themeConfig?: Record<string, any>;
-
-  @ApiPropertyOptional({ example: 'admin@example.com' })
-  @IsString()
-  @IsOptional()
-  adminEmail?: string;
-
-  @ApiPropertyOptional({ example: 'password123' })
-  @IsString()
-  @IsOptional()
-  adminPassword?: string;
-}
+export class CreateTenantDto extends createZodDto(CreateTenantSchema) {}

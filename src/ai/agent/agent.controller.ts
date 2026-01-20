@@ -16,7 +16,7 @@
  * 2. CÁC ENDPOINT:
  *    - [Liệt kê các endpoint] *
  * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
- * - Tiếp nhận request từ Client, điều phối xử lý và trả về response.
+ * - Tiếp nhận request từ Client, validate dữ liệu và điều phối xử lý logic thông qua các Service tương ứng.
 
  * =====================================================================
  */
@@ -25,19 +25,14 @@ import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { AgentService } from './agent.service';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 
-/**
- * =============================================================================
- * AGENT CONTROLLER - API ENDPOINT CHO AI AGENT
- * =============================================================================
- */
+const ExecuteCommandSchema = z.object({
+  command: z.string().min(1),
+});
 
-export class ExecuteCommandDto {
-  @IsString()
-  @IsNotEmpty()
-  command: string;
-}
+export class ExecuteCommandDto extends createZodDto(ExecuteCommandSchema) {}
 
 @ApiTags('AI Agent')
 @Controller('agent')

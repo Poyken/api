@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, Min } from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 
 /**
  * =====================================================================
@@ -15,14 +15,13 @@ import { IsInt, Min } from 'class-validator';
  * 2. TYPE SAFETY:
  * - `@IsInt()`: Đảm bảo số lượng phải là số nguyên, không chấp nhận số thập phân. *
  * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
- * - Tiếp nhận request từ Client, điều phối xử lý và trả về response.
+ * - Xử lý logic nghiệp vụ, phối hợp các service liên quan để hoàn thành yêu cầu từ Controller.
 
  * =====================================================================
  */
 
-export class UpdateCartItemDto {
-  @ApiProperty({ example: 2 })
-  @IsInt()
-  @Min(1)
-  quantity: number;
-}
+const UpdateCartItemSchema = z.object({
+  quantity: z.number().int().min(1).describe('2'),
+});
+
+export class UpdateCartItemDto extends createZodDto(UpdateCartItemSchema) {}

@@ -27,7 +27,7 @@ import {
  * 4. FORBIDDEN EXCEPTION:
  * - Nếu không đủ quyền, ta ném ra `ForbiddenException` (HTTP 403), khác với `UnauthorizedException` (HTTP 401 - chưa đăng nhập). *
  * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
- * - Tiếp nhận request từ Client, điều phối xử lý và trả về response.
+ * - Xử lý logic nghiệp vụ, phối hợp các service liên quan để hoàn thành yêu cầu từ Controller.
 
  * =====================================================================
  */
@@ -58,7 +58,7 @@ export class PermissionsGuard implements CanActivate {
     // Regular tenant admins MUST have explicit permissions in their token.
     if (
       user?.roles?.includes('SUPERADMIN') &&
-      user?.permissions?.includes('superAdmin:read')
+      user?.permissions?.includes('super-admin:read')
     ) {
       return true;
     }

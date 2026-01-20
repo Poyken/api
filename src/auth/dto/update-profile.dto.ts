@@ -1,11 +1,5 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsEmail,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  MinLength,
-} from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 
 /**
  * =====================================================================
@@ -22,29 +16,19 @@ import {
  * - `MinLength(2)`: Tên người ít nhất phải 2 ký tự (vd: "An").
  * - `IsUrl()`: Đảm bảo avatar phải là link ảnh hợp lệ (thường từ Cloudinary/S3). *
  * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
- * - Tiếp nhận request từ Client, điều phối xử lý và trả về response.
+ * - Xử lý logic nghiệp vụ, phối hợp các service liên quan để hoàn thành yêu cầu từ Controller.
 
  * =====================================================================
  */
-export class UpdateProfileDto {
-  @ApiPropertyOptional({ example: 'John' })
-  @IsString()
-  @IsOptional()
-  firstName?: string;
+const UpdateProfileSchema = z.object({
+  firstName: z.string().optional().describe('John'),
+  lastName: z.string().optional().describe('Doe'),
+  avatarUrl: z.string().optional().describe('new_avatar_url'),
+  password: z
+    .string()
+    .min(6, 'Mật khẩu phải ít nhất 6 ký tự')
+    .optional()
+    .describe('newpassword123'),
+});
 
-  @ApiPropertyOptional({ example: 'Doe' })
-  @IsString()
-  @IsOptional()
-  lastName?: string;
-
-  @ApiPropertyOptional({ example: 'new_avatar_url' })
-  @IsString()
-  @IsOptional()
-  avatarUrl?: string;
-
-  @ApiPropertyOptional({ example: 'newpassword123', minLength: 6 })
-  @IsString()
-  @IsOptional()
-  @MinLength(6, { message: 'Mật khẩu phải ít nhất 6 ký tự' })
-  password?: string;
-}
+export class UpdateProfileDto extends createZodDto(UpdateProfileSchema) {}

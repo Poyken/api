@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, MinLength } from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 
 /**
  * =====================================================================
@@ -18,40 +18,32 @@ import { IsEmail, MinLength } from 'class-validator';
  * 3. DATA CONSISTENCY:
  * - DTO này đảm bảo rằng mọi tài khoản mới được tạo ra đều có đầy đủ các thông tin cơ bản cần thiết cho hệ thống. *
  * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
- * - Tiếp nhận request từ Client, điều phối xử lý và trả về response.
+ * - Xử lý logic nghiệp vụ, phối hợp các service liên quan để hoàn thành yêu cầu từ Controller.
 
  * =====================================================================
  */
 
-export class RegisterDto {
-  @ApiProperty({
-    example: 'test@example.com',
-    description: 'The email of the user',
-  })
-  @IsEmail()
-  email: string;
+const RegisterSchema = z.object({
+  email: z
+    .string()
+    .min(1, 'Email is required')
+    .email('Invalid email address')
+    .describe('The email of the user'),
+  password: z
+    .string()
+    .min(1, 'Password is required')
+    .min(6, 'Password must be at least 6 characters')
+    .describe('The password of the user'),
+  firstName: z
+    .string()
+    .min(1, 'First name is required')
+    .min(2, 'First name must be at least 2 characters')
+    .describe('The first name of the user'),
+  lastName: z
+    .string()
+    .min(1, 'Last name is required')
+    .min(2, 'Last name must be at least 2 characters')
+    .describe('The last name of the user'),
+});
 
-  @ApiProperty({
-    example: 'password123',
-    description: 'The password of the user',
-    minLength: 6,
-  })
-  @MinLength(6)
-  password: string;
-
-  @ApiProperty({
-    example: 'John',
-    description: 'The first name of the user',
-    minLength: 2,
-  })
-  @MinLength(2)
-  firstName: string;
-
-  @ApiProperty({
-    example: 'Doe',
-    description: 'The last name of the user',
-    minLength: 2,
-  })
-  @MinLength(2)
-  lastName: string;
-}
+export class RegisterDto extends createZodDto(RegisterSchema) {}

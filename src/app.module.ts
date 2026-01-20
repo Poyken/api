@@ -20,7 +20,7 @@
  * 5. GLOBAL PROVIDERS:
  * - `APP_GUARD`: Ta đăng ký `ThrottlerGuard` ở cấp độ toàn cầu để bảo vệ mọi API mà không cần khai báo lại ở từng Controller. *
  * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
- * - Tiếp nhận request từ Client, điều phối xử lý và trả về response.
+ * - Xử lý logic nghiệp vụ, phối hợp các service liên quan để hoàn thành yêu cầu từ Controller.
 
  * =====================================================================
  */
@@ -32,27 +32,20 @@ import { AuditInterceptor } from '@/audit/audit.interceptor';
 import { AuditModule } from '@/audit/audit.module';
 import { AuthModule } from '@/auth/auth.module';
 import { BlogModule } from '@/blog/blog.module';
-import { BrandsModule } from '@/catalog/brands/brands.module';
-import { CartModule } from '@/cart/cart.module';
-import { CategoriesModule } from '@/catalog/categories/categories.module';
+import { CatalogModule } from '@/catalog/catalog.module'; // NEW
 import { CommonModule } from '@/common/common.module';
 import { FeatureFlagsModule } from '@/common/feature-flags/feature-flags.module';
 import { PromotionsModule } from '@/promotions/promotions.module';
-import { RmaModule } from '@/rma/rma.module';
+// import { RmaModule } from '@/rma/rma.module'; // REMOVED
 import { InventoryModule } from '@/inventory/inventory.module';
 import { MediaModule } from '@/media/media.module';
 import { CustomerGroupsModule } from '@/customer-groups/customer-groups.module';
 import { NotificationsModule } from '@/notifications/notifications.module';
-import { OrdersModule } from '@/orders/orders.module';
 import { PagesModule } from '@/pages/pages.module';
-import { PaymentModule } from '@/payment/payment.module';
-import { ProductsModule } from '@/catalog/products/products.module';
+import { SalesModule } from '@/sales/sales.module'; // NEW
 import { PlansModule } from '@/plans/plans.module';
-import { InvoicesModule } from '@/invoices/invoices.module';
 import { ReviewsModule } from '@/reviews/reviews.module';
 import { RolesModule } from '@/roles/roles.module';
-import { ShippingModule } from '@/shipping/shipping.module';
-import { SkusModule } from '@/catalog/skus/skus.module';
 import { TenantsModule } from '@/tenants/tenants.module';
 import { UsersModule } from '@/users/users.module';
 import { WishlistModule } from '@/wishlist/wishlist.module';
@@ -69,7 +62,6 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
-import * as Joi from 'joi';
 import { HealthController } from './health.controller';
 
 import { WorkerModule } from '@/worker/worker.module';
@@ -80,18 +72,13 @@ import { CorrelationIdMiddleware } from '@core/middlewares/correlation-id.middle
 import { RedisService } from '@core/redis/redis.service';
 import { IdempotencyInterceptor } from '@core/interceptors/idempotency.interceptor';
 import { TenantMiddleware } from '@core/tenant/tenant.middleware';
-// import { TenantsController } from '@core/tenant/tenants.controller'; // REMOVED
 import { CacheModule } from '@nestjs/cache-manager';
-import { AiChatModule } from './ai/ai-chat/ai-chat.module';
+import { AiModule } from '@/ai/ai.module'; // NEW
 import { ChatModule } from './chat/chat.module';
 import { LockdownGuard } from '@core/guards/lockdown.guard';
 import { SuperAdminIpGuard } from '@core/guards/super-admin-ip.guard';
 import { TenantGuard } from '@core/guards/tenant.guard';
 import { JwtModule } from '@nestjs/jwt';
-import { AgentModule } from './ai/agent/agent.module';
-import { InsightsModule } from './ai/insights/insights.module';
-import { ImageProcessorModule } from './ai/images/image-processor.module';
-import { RagModule } from './ai/rag/rag.module';
 import { SentryModule } from '@core/sentry/sentry.module';
 import { DataLoaderModule } from '@core/dataloader/dataloader.module';
 import { MetricsModule } from '@core/metrics/metrics.module';
@@ -107,39 +94,51 @@ import { SubscriptionModule } from './subscription/subscription.module';
 import { ReportsModule } from './reports/reports.module';
 import { InventoryAlertsModule } from './inventory-alerts/inventory-alerts.module';
 
+import { z } from 'zod';
+
+// Zod Schema for Environment Variables
+const envSchema = z.object({
+  NODE_ENV: z
+    .enum(['development', 'production', 'test', 'provision'])
+    .default('development'),
+  PORT: z.coerce.number().default(8080),
+
+  // Database
+  DATABASE_URL: z.string().min(1),
+
+  // Authentication
+  JWT_ACCESS_SECRET: z.string().min(1),
+  JWT_ACCESS_EXPIRED: z.string().default('15m'),
+  JWT_REFRESH_SECRET: z.string().min(1),
+  JWT_REFRESH_EXPIRED: z.string().default('7d'),
+
+  // Redis
+  REDIS_URL: z.string().min(1),
+
+  // Frontend
+  FRONTEND_URL: z.string().min(1),
+});
+
+function validate(config: Record<string, unknown>) {
+  const result = envSchema.safeParse(config);
+  if (!result.success) {
+    throw new Error('Config validation error: ' + result.error.message);
+  }
+  return result.data;
+}
+
 @Module({
   imports: [
     JwtModule.register({}),
     CacheModule.register({
       isGlobal: true,
-      ttl: CACHE_CONFIG.DEFAULT_TTL * 1000, // Convert seconds to milliseconds
+      ttl: CACHE_CONFIG.DEFAULT_TTL * 1000,
       max: CACHE_CONFIG.MAX_ITEMS,
     }),
     // 1. ConfigModule - Quản lý biến môi trường (.env)
-    // isGlobal: true => Có thể inject ConfigService ở bất kỳ module nào
     ConfigModule.forRoot({
       isGlobal: true,
-      validationSchema: Joi.object({
-        NODE_ENV: Joi.string()
-          .valid('development', 'production', 'test', 'provision')
-          .default('development'),
-        PORT: Joi.number().default(8080),
-
-        // Database
-        DATABASE_URL: Joi.string().required(),
-
-        // Authentication
-        JWT_ACCESS_SECRET: Joi.string().required(),
-        JWT_ACCESS_EXPIRED: Joi.string().default('15m'),
-        JWT_REFRESH_SECRET: Joi.string().required(),
-        JWT_REFRESH_EXPIRED: Joi.string().default('7d'),
-
-        // Redis
-        REDIS_URL: Joi.string().required(),
-
-        // Frontend
-        FRONTEND_URL: Joi.string().required(),
-      }),
+      validate,
     }),
 
     // 2. ThrottlerModule - Rate Limiting (Chống spam request)
@@ -195,22 +194,14 @@ import { InventoryAlertsModule } from './inventory-alerts/inventory-alerts.modul
     // 7. RolesModule - Quản lý vai trò & quyền hạn (RBAC)
     RolesModule,
 
-    // 8. Các Module liên quan đến sản phẩm - Quản lý sản phẩm
-    CategoriesModule, // Danh mục sản phẩm
-    BrandsModule, // Thương hiệu
-    ProductsModule, // Sản phẩm
-    SkusModule, // Biến thể sản phẩm (SKU - Stock Keeping Unit)
+    // 8. Catalog Domain
+    CatalogModule,
     PlansModule,
-    InvoicesModule,
-    // 9. CartModule - Giỏ hàng
-    CartModule,
 
-    // 10. OrdersModule - Đơn hàng
-    OrdersModule,
+    // 9. Sales Domain (Orders, Cart, Payment, Invoices, Shipping)
+    SalesModule,
+
     PagesModule,
-
-    // 11. PaymentModule - Thanh toán
-    PaymentModule,
 
     // 12. NotificationsModule - Thông báo (Email, Push)
     NotificationsModule,
@@ -239,8 +230,6 @@ import { InventoryAlertsModule } from './inventory-alerts/inventory-alerts.modul
     AdminModule,
     SuperAdminModule,
 
-    ShippingModule,
-
     WishlistModule,
 
     BlogModule,
@@ -248,16 +237,15 @@ import { InventoryAlertsModule } from './inventory-alerts/inventory-alerts.modul
     WorkerModule,
     ScheduleModule.forRoot(),
     ChatModule,
-    AiChatModule,
-    AgentModule, // AI Agent System
-    InsightsModule, // AI Business Insights
-    ImageProcessorModule, // AI Image Enhancement
-    RagModule, // RAG Chatbot
+
+    // AI Domain
+    AiModule,
+
     SentryModule, // Error Tracking & Performance Monitoring
     DataLoaderModule, // N+1 Query Prevention
     MetricsModule, // Prometheus Metrics
     PromotionsModule,
-    RmaModule,
+    // RmaModule REMOVED
     InventoryModule,
     MediaModule,
     CustomerGroupsModule,
@@ -268,7 +256,6 @@ import { InventoryAlertsModule } from './inventory-alerts/inventory-alerts.modul
     LoyaltyModule,
     WebhooksModule,
     DevToolsModule,
-    AnalyticsModule,
     SubscriptionModule,
     ReportsModule,
     InventoryAlertsModule,

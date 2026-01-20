@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 
 /**
  * =====================================================================
@@ -19,29 +19,16 @@ import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
  * - `@IsNotEmpty()`: Tên danh mục là bắt buộc.
  * - `@IsOptional()`: Slug và ParentId là tùy chọn, giúp API linh hoạt hơn. *
  * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
- * - Tiếp nhận request từ Client, điều phối xử lý và trả về response.
+ * - Xử lý logic nghiệp vụ, phối hợp các service liên quan để hoàn thành yêu cầu từ Controller.
 
  * =====================================================================
  */
 
-export class CreateCategoryDto {
-  @ApiProperty({ example: 'Electronics' })
-  @IsString()
-  @IsNotEmpty()
-  name: string;
+const CreateCategorySchema = z.object({
+  name: z.string().min(1, 'Name is required').describe('Electronics'),
+  slug: z.string().optional().describe('electronics'),
+  parentId: z.string().optional().describe('uuid-parent-id'),
+  imageUrl: z.string().optional().describe('https://cloudinary.com/image.jpg'),
+});
 
-  @ApiProperty({ example: 'electronics', required: false })
-  @IsString()
-  @IsOptional()
-  slug?: string;
-
-  @ApiProperty({ example: 'uuid-parent-id', required: false })
-  @IsString()
-  @IsOptional()
-  parentId?: string;
-
-  @ApiProperty({ example: 'https://cloudinary.com/image.jpg', required: false })
-  @IsString()
-  @IsOptional()
-  imageUrl?: string;
-}
+export class CreateCategoryDto extends createZodDto(CreateCategorySchema) {}

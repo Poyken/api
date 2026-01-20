@@ -16,7 +16,7 @@
  * 2. CÁC ENDPOINT:
  *    - [Liệt kê các endpoint] *
  * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
- * - Tiếp nhận request từ Client, điều phối xử lý và trả về response.
+ * - Tiếp nhận request từ Client, validate dữ liệu và điều phối xử lý logic thông qua các Service tương ứng.
 
  * =====================================================================
  */
@@ -38,8 +38,6 @@ import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { SubscriptionsService } from './subscriptions.service';
 import { BillingFrequency, TenantPlan } from '@prisma/client';
 import type { RequestWithUser } from '@/auth/interfaces/request-with-user.interface';
-import { IsEnum, IsOptional, IsString, IsInt, Min } from 'class-validator';
-import { Type } from 'class-transformer';
 import { RequirePermissions } from '@/common/decorators/crud.decorators';
 import { PermissionsGuard } from '@/auth/permissions.guard';
 import {
@@ -48,49 +46,29 @@ import {
   ApiUpdateResponse,
 } from '@/common/decorators/crud.decorators';
 
-class UpgradePlanDto {
-  @IsEnum(TenantPlan)
-  plan: TenantPlan;
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 
-  @IsEnum(BillingFrequency)
-  frequency: BillingFrequency;
-}
+const UpgradePlanSchema = z.object({
+  plan: z.nativeEnum(TenantPlan),
+  frequency: z.nativeEnum(BillingFrequency),
+});
+class UpgradePlanDto extends createZodDto(UpgradePlanSchema) {}
 
-class SubscriptionQueryDto {
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number;
+const SubscriptionQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).optional(),
+  search: z.string().optional(),
+  status: z.string().optional(),
+});
+class SubscriptionQueryDto extends createZodDto(SubscriptionQuerySchema) {}
 
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  limit?: number;
-
-  @IsOptional()
-  @IsString()
-  search?: string;
-
-  @IsOptional()
-  @IsString()
-  status?: string;
-}
-
-class UpdateSubscriptionDto {
-  @IsOptional()
-  @IsEnum(TenantPlan)
-  plan?: TenantPlan;
-
-  @IsOptional()
-  @IsEnum(BillingFrequency)
-  billingFrequency?: BillingFrequency;
-
-  @IsOptional()
-  @IsString()
-  status?: string;
-}
+const UpdateSubscriptionSchema = z.object({
+  plan: z.nativeEnum(TenantPlan).optional(),
+  billingFrequency: z.nativeEnum(BillingFrequency).optional(),
+  status: z.string().optional(),
+});
+class UpdateSubscriptionDto extends createZodDto(UpdateSubscriptionSchema) {}
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')

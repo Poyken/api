@@ -35,12 +35,12 @@ import { createPaginatedResult } from '@/common/dto/base.dto';
  *
  * 3. DATA SERIALIZATION:
  * - Mọi dữ liệu trả về đều được bọc trong `new UserEntity(user)`.
- * - Điều này kích hoạt các Decorator của `class-transformer` để ẩn mật khẩu và làm phẳng (Flatten) các quan hệ phức tạp.
+ * - Constructor của `UserEntity` sẽ tự động xử lý việc ẩn mật khẩu và làm phẳng (Flatten) các quan hệ Roles/Permissions.
  *
  * 4. ERROR HANDLING:
  * - Sử dụng các Exception chuẩn của NestJS (`ConflictException`, `NotFoundException`) để trả về mã lỗi HTTP và thông báo rõ ràng cho Client. *
  * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
- * - Tiếp nhận request từ Client, điều phối xử lý và trả về response.
+ * - Quản lý thông tin hồ sơ, phân quyền truy cập (RBAC) và theo dõi lịch sử hoạt động của khách hàng/nhân viên.
 
  * =====================================================================
  */

@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 
 /**
  * =====================================================================
@@ -16,17 +16,16 @@ import { IsNotEmpty, IsString } from 'class-validator';
  * - DTO này chỉ cần duy nhất một trường `refreshToken`.
  * - Việc kiểm tra tính hợp lệ và cấp mới sẽ do `AuthService` và `TokenService` đảm nhận. *
  * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
- * - Tiếp nhận request từ Client, điều phối xử lý và trả về response.
+ * - Xử lý logic nghiệp vụ, phối hợp các service liên quan để hoàn thành yêu cầu từ Controller.
 
  * =====================================================================
  */
 
-export class RefreshTokenDto {
-  @ApiProperty({
-    example: 'refresh-token-string',
-    description: 'The refresh token',
-  })
-  @IsString()
-  @IsNotEmpty()
-  refreshToken: string;
-}
+const RefreshTokenSchema = z.object({
+  refreshToken: z
+    .string()
+    .min(1, 'Refresh token cannot be empty')
+    .describe('refresh-token-string'),
+});
+
+export class RefreshTokenDto extends createZodDto(RefreshTokenSchema) {}
