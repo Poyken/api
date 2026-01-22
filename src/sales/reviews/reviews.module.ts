@@ -20,7 +20,7 @@ import { PrismaModule } from '@core/prisma/prisma.module';
 
  * =====================================================================
  */
-import { CloudinaryModule } from '@integrations/cloudinary/cloudinary.module';
+import { CloudinaryModule } from '@/platform/integrations/external/cloudinary/cloudinary.module';
 import { ReviewsController } from './reviews.controller';
 import { ReviewsService } from './reviews.service';
 import { AiSentimentService } from './ai-sentiment.service';

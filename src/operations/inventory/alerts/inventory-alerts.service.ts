@@ -23,7 +23,7 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@/core/prisma/prisma.service';
-import { EmailService } from '@/integrations/email/email.service';
+import { EmailService } from '@/platform/integrations/external/email/email.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()

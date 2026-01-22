@@ -9,7 +9,7 @@ import {
 } from '@/common/decorators/crud.decorators';
 import { JwtAuthGuard } from '@/identity/auth/jwt-auth.guard';
 import { PermissionsGuard } from '@/identity/auth/permissions.guard';
-import { CloudinaryService } from '@integrations/cloudinary/cloudinary.service';
+import { CloudinaryService } from '@/platform/integrations/external/cloudinary/cloudinary.service';
 import {
   Body,
   Controller,

@@ -19,7 +19,7 @@
 
  * =====================================================================
  */
-import { CloudinaryService } from '@integrations/cloudinary/cloudinary.service';
+import { CloudinaryService } from '@/platform/integrations/external/cloudinary/cloudinary.service';
 import {
   Body,
   Controller,
