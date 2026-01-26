@@ -58,14 +58,10 @@ export class PrismaProductRepository implements IProductRepository {
       CACHE_TTL.PRODUCT_DETAIL,
     );
 
-    if (!cachedProduct) return null;
-
-    // Reconstitute if retrieved from cache as a plain object
     if (!(cachedProduct instanceof Product)) {
-      // In case we only stored persistence form in cache, or just plain props
-      // ProductMapper.toPersistence returns Record<string, any>
-      // We might need to handle this.
-      return Product.fromPersistence(cachedProduct as any);
+      // If it's a plain object from cache, map it back to domain entity
+      // ProductMapper.toDomain handles both Prisma and POJO formats
+      return ProductMapper.toDomain(cachedProduct as any);
     }
 
     return cachedProduct;
