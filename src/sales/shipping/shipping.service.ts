@@ -1,32 +1,14 @@
-import { PrismaService } from '@core/prisma/prisma.service';
 import { Injectable, Logger } from '@nestjs/common';
-import { OrderStatus } from '@prisma/client';
-
-export interface Province {
-  ProvinceID: number;
-  ProvinceName: string;
-}
-
-export interface District {
-  DistrictID: number;
-  DistrictName: string;
-}
-
-export interface Ward {
-  WardCode: string;
-  WardName: string;
-}
-
-import { NotificationsGateway } from '@/notifications/notifications.gateway';
-import { NotificationsService } from '@/notifications/notifications.service';
-import { EmailService } from '@/platform/integrations/external/email/email.service';
 import { GHNService } from './ghn.service';
+import { UpdateShipmentStatusUseCase } from './application/use-cases/update-shipment-status.use-case';
+import { GetShippingLocationUseCase } from './application/use-cases/get-shipping-location.use-case';
+import { CalculateShippingFeeUseCase } from './application/use-cases/calculate-shipping-fee.use-case';
+import { ShipmentStatus } from '../domain/entities/shipment.entity';
+import { LocationType } from './application/use-cases/types';
 
 /**
  * =====================================================================
  * SHIPPING SERVICE - QUẢN LÝ VẬN CHUYỂN & GIAO VẬN
- * =====================================================================
- *
  * =====================================================================
  */
 @Injectable()
@@ -35,43 +17,47 @@ export class ShippingService {
 
   constructor(
     public readonly ghnService: GHNService,
-    private readonly prisma: PrismaService,
-    private readonly notificationsService: NotificationsService,
-    private readonly notificationsGateway: NotificationsGateway,
-    private readonly emailService: EmailService,
+    private readonly updateShipmentStatusUseCase: UpdateShipmentStatusUseCase,
+    private readonly getShippingLocationUseCase: GetShippingLocationUseCase,
+    private readonly calculateShippingFeeUseCase: CalculateShippingFeeUseCase,
   ) {}
 
-  getProvinces(): Promise<Province[]> {
-    return this.ghnService.getProvinces();
+  async getProvinces() {
+    const result = await this.getShippingLocationUseCase.execute({
+      type: LocationType.PROVINCE,
+    });
+    return result.isSuccess ? result.value : [];
   }
 
-  getDistricts(provinceId: number): Promise<District[]> {
-    return this.ghnService.getDistricts(provinceId);
+  async getDistricts(provinceId: number) {
+    const result = await this.getShippingLocationUseCase.execute({
+      type: LocationType.DISTRICT,
+      parentId: provinceId,
+    });
+    return result.isSuccess ? result.value : [];
   }
 
-  getWards(districtId: number): Promise<Ward[]> {
-    return this.ghnService.getWards(districtId);
+  async getWards(districtId: number) {
+    const result = await this.getShippingLocationUseCase.execute({
+      type: LocationType.WARD,
+      parentId: districtId,
+    });
+    return result.isSuccess ? result.value : [];
   }
 
   async calculateFee(
     toDistrictId: number,
     toWardCode: string,
   ): Promise<number> {
-    return this.ghnService.calculateFee({
-      to_district_id: toDistrictId,
-      to_ward_code: toWardCode,
-      weight: 1000, // Default weight 1kg
-      length: 10,
-      width: 10,
-      height: 10,
+    const result = await this.calculateShippingFeeUseCase.execute({
+      toDistrictId,
+      toWardCode,
     });
+    return result.isSuccess ? result.value : 30000;
   }
 
   /**
    * Xử lý Webhook từ GHN để tự động cập nhật trạng thái đơn hàng.
-   * GHN Statuses: ready_to_pick, picking, picked, delivering, delivered, cancel, return, returned...
-   *
-   * Logic: Map trạng thái GHN sang trạng thái nội bộ -> Update DB -> Gửi Noti/Email.
    */
   async handleGHNWebhook(payload: any) {
     const { OrderCode, Status } = payload;
@@ -81,143 +67,37 @@ export class ShippingService {
       return { success: false, message: 'Invalid payload' };
     }
 
-    this.logger.log(`Received GHN Webhook for order ${OrderCode}: ${Status}`);
+    this.logger.log(
+      `Received GHN Webhook for shipment ${OrderCode}: ${Status}`,
+    );
 
-    // Map GHN Status to our OrderStatus
-    let newStatus: OrderStatus | null = null;
+    const statusMapping: Record<string, ShipmentStatus> = {
+      ready_to_pick: ShipmentStatus.READY_TO_SHIP,
+      picking: ShipmentStatus.READY_TO_SHIP,
+      picked: ShipmentStatus.SHIPPED,
+      delivering: ShipmentStatus.SHIPPED,
+      money_collect_delivering: ShipmentStatus.SHIPPED,
+      delivered: ShipmentStatus.DELIVERED,
+      cancel: ShipmentStatus.FAILED,
+      return: ShipmentStatus.RETURNED,
+      returned: ShipmentStatus.RETURNED,
+    };
 
-    const ghnStatus = Status.toLowerCase();
+    const newStatus = statusMapping[Status.toLowerCase()];
+    if (!newStatus) return { success: true, message: 'Status ignored' };
 
-    if (
-      ['picked', 'delivering', 'money_collect_delivering'].includes(ghnStatus)
-    ) {
-      newStatus = OrderStatus.SHIPPED;
-    } else if (ghnStatus === 'ready_to_pick') {
-      this.logger.log(`Order ${OrderCode} is ready to pick at GHN`);
-      // Optional: Force status to PROCESSING if currently PENDING?
-      // newStatus = OrderStatus.PROCESSING;
-    } else if (ghnStatus === 'delivered') {
-      newStatus = OrderStatus.DELIVERED;
-    } else if (ghnStatus === 'cancel') {
-      newStatus = OrderStatus.CANCELLED;
-    } else if (['return', 'returned'].includes(ghnStatus)) {
-      newStatus = OrderStatus.RETURNED;
-    }
+    const result = await this.updateShipmentStatusUseCase.execute({
+      trackingCode: OrderCode,
+      status: newStatus,
+      expectedDeliveryTime: payload.ExpectedDeliveryTime
+        ? new Date(payload.ExpectedDeliveryTime)
+        : undefined,
+      reason: payload.Reason,
+    });
 
-    if (!newStatus) {
-      return { success: true, message: 'Status ignored' };
-    }
-
-    try {
-      const order = await this.prisma.order.findFirst({
-        where: { shippingCode: OrderCode },
-      });
-
-      if (!order) {
-        this.logger.warn(`Order with shipping code ${OrderCode} not found`);
-        return { success: false, message: 'Order not found' };
-      }
-
-      // Chỉ cập nhật nếu trạng thái mới khác trạng thái hiện tại hoặc có cập nhật GHN status
-      if (order.status !== newStatus || order.ghnStatus !== Status) {
-        const updateData: any = { ghnStatus: Status };
-        if (newStatus) updateData.status = newStatus;
-        if (payload.ExpectedDeliveryTime) {
-          updateData.expectedDeliveryTime = new Date(
-            payload.ExpectedDeliveryTime,
-          );
-        }
-
-        // ✅ Lưu lý do hủy nếu có (từ GHN bắn về)
-        if (newStatus === OrderStatus.CANCELLED && payload.Reason) {
-          updateData.cancellationReason = payload.Reason;
-        }
-
-        await this.prisma.order.update({
-          where: { id: order.id },
-          data: updateData,
-        });
-
-        this.logger.log(
-          `Cập nhật đơn hàng ${order.id} sang trạng thái ${newStatus || order.status} (GHN: ${Status}) qua Webhook`,
-        );
-
-        // ✅ Gửi Notification & Email
-        if (
-          [
-            OrderStatus.SHIPPED,
-            OrderStatus.DELIVERED,
-            OrderStatus.CANCELLED,
-            OrderStatus.RETURNED,
-          ].includes(newStatus || order.status)
-        ) {
-          const updatedOrder = await this.prisma.order.findUnique({
-            where: { id: order.id },
-            include: {
-              user: true,
-              items: { include: { sku: { include: { product: true } } } },
-              address: true,
-            },
-          });
-
-          if (updatedOrder) {
-            // Send Email
-            await this.emailService.sendOrderStatusUpdate(updatedOrder);
-
-            // Send In-App Notification
-            let title = 'Cập nhật đơn hàng';
-            let message = `Đơn hàng #${order.id.slice(-8)} đã chuyển sang trạng thái ${newStatus}`;
-            let notiType = 'ORDER';
-
-            const targetStatus = newStatus || order.status;
-
-            switch (targetStatus) {
-              case OrderStatus.SHIPPED:
-                title = 'Đơn hàng đang giao';
-                message = `Đơn hàng #${order.id.slice(-8)} đã được bàn giao cho đơn vị vận chuyển.`;
-                notiType = 'ORDER_SHIPPED';
-                break;
-              case OrderStatus.DELIVERED:
-                title = 'Giao hàng thành công';
-                message = `Đơn hàng #${order.id.slice(-8)} đã được giao thành công. Cảm ơn bạn đã mua sắm!`;
-                notiType = 'ORDER_DELIVERED';
-                break;
-              case OrderStatus.CANCELLED:
-                title = 'Đơn hàng đã hủy';
-                message = `Đơn hàng #${order.id.slice(-8)} của bạn đã bị hủy.`;
-                notiType = 'ORDER_CANCELLED';
-                break;
-              case OrderStatus.RETURNED:
-                title = 'Đơn hàng đã hoàn';
-                message = `Đơn hàng #${order.id.slice(-8)} của bạn đã được hoàn trả.`;
-                notiType = 'ORDER_RETURNED';
-                break;
-            }
-
-            try {
-              const notification = await this.notificationsService.create({
-                userId: updatedOrder.userId,
-                tenantId: updatedOrder.tenantId,
-                type: notiType,
-                title,
-                message,
-                link: `/orders/${order.id}`,
-              });
-              this.notificationsGateway.sendNotificationToUser(
-                updatedOrder.userId,
-                notification,
-              );
-            } catch (e) {
-              this.logger.error('Failed to send notification in webhook', e);
-            }
-          }
-        }
-      }
-
-      return { success: true };
-    } catch (error) {
-      this.logger.error('Error processing GHN Webhook', error);
-      return { success: false, error: error.message };
-    }
+    return {
+      success: result.isSuccess,
+      message: result.isFailure ? result.error.message : undefined,
+    };
   }
 }

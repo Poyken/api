@@ -18,6 +18,8 @@ import { NotificationsController } from './notifications.controller';
 import { NotificationsGateway } from './notifications.gateway';
 import { NotificationsService } from './notifications.service';
 
+import { OrderNotificationsHandler } from './application/handlers/order-notifications.handler';
+
 @Module({
   imports: [
     BullModule.registerQueue({
@@ -35,7 +37,12 @@ import { NotificationsService } from './notifications.service';
     EmailModule,
   ],
   controllers: [NotificationsController],
-  providers: [EmailProcessor, NotificationsService, NotificationsGateway],
+  providers: [
+    EmailProcessor,
+    NotificationsService,
+    NotificationsGateway,
+    OrderNotificationsHandler,
+  ],
   exports: [BullModule, NotificationsService, NotificationsGateway],
 })
 export class NotificationsModule {}

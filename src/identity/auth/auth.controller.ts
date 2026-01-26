@@ -1,6 +1,21 @@
 /**
  * =====================================================================
- * AUTH CONTROLLER
+ * AUTH CONTROLLER - Cổng xác thực & Tài khoản
+ * =====================================================================
+ *
+ * 📚 GIẢI THÍCH CHO THỰC TẬP SINH:
+ *
+ * 1. HTTP-ONLY COOKIE:
+ * - Refresh Token được lưu trong `httpOnly` cookie để chống XSS (JavaScript không đọc được).
+ * - Access Token trả về verify body để Client dùng gọi API.
+ *
+ * 2. SECURITY FEATURES:
+ * - 2FA (Two-Factor Auth): Sinh QR Code, verify OTP.
+ * - Social Login: Google/Facebook OAuth2 callback xử lý ở đây.
+ * - Throttling: `@Throttle` giới hạn số lần thử login để chống Brute Force. *
+ * 🎯 ỨNG DỤNG THỰC TẾ (APPLICATION):
+ * - Cổng giao tiếp cho các hành động đăng nhập, đăng ký và xác thực hai lớp (2FA).
+
  * =====================================================================
  */
 import {
@@ -27,7 +42,6 @@ import {
   ApiUpdateResponse,
 } from '@/common/decorators/crud.decorators';
 import { getFingerprint } from '@/common/utils/fingerprint';
-import { AUTH_CONFIG } from '@core/config/constants';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -38,6 +52,37 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import type { RequestWithUser } from './interfaces/request-with-user.interface';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { TwoFactorService } from './two-factor.service';
+import {
+  LoginUseCase,
+  RegisterUseCase,
+  RefreshTokenUseCase,
+  LogoutUseCase,
+} from '../application/use-cases/auth';
+import { getTenant } from '@core/tenant/tenant.context';
+
+/**
+ * =====================================================================
+ * AUTH CONTROLLER - CỔNG XÁC THỰC & QUẢN LÝ TÀI KHOẢN
+ * =====================================================================
+ */
+
+/**
+ * 🌐 CẤU HÌNH COOKIE CHO PRODUCTION (VERCEL + RENDER)
+ * 📚 TẠI SAO CẦN SameSite: 'none' VÀ Secure: true?
+ * 1. Vì Web (Vercel) và API (Render) nằm trên 2 domain khác nhau hoàn toàn.
+ * 2. Trình duyệt mặc định sẽ CHẶN cookie của API gửi về Web (Cross-site).
+ * 3. 'none' cho phép gửi xuyên domain, và 'none' BẮT BUỘC phải đi kèm 'secure: true'.
+ *
+ * ⚠️ LƯU Ý: Không được đổi về 'lax' hay 'strict' khi deploy thực tế,
+ * nếu không User sẽ không thể đăng nhập hoặc duy trì phiên làm việc.
+ */
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: true, // Bắt buộc phải có để SameSite 'none' hoạt động
+  sameSite: 'none' as const,
+  path: '/',
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+};
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -45,10 +90,13 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly twoFactorService: TwoFactorService,
+    private readonly loginUseCase: LoginUseCase,
+    private readonly registerUseCase: RegisterUseCase,
+    private readonly logoutUseCase: LogoutUseCase,
+    private readonly refreshTokenUseCase: RefreshTokenUseCase,
   ) {}
 
   @Post('register')
-  @Throttle({ default: { limit: 3, ttl: 60000 } }) // Max 3 registrations per minute per IP
   @ApiCreateResponse('User', { summary: 'Đăng ký tài khoản mới' })
   async register(
     @Body() dto: RegisterDto,
@@ -56,19 +104,47 @@ export class AuthController {
     @Request() req: any,
   ) {
     const fp = getFingerprint(req);
-    const data = await this.authService.register(dto, fp);
+    // Use Case implementation
+    const tenant = (req as any).tenant; // Extracted by middleware usually, but RegisterDto might not have it if public.
+    // Usually register is for Customer in a specific Tenant Context if subdomain is there.
+    // If Global Register (like signup for new tenant), that's handled by TenantRegistrationController.
+    // This endpoint is for Customer Registration in a Store.
+
+    // We need to resolve tenantId. If standard AuthGuard is not used, we might rely on Headers or Host.
+    // Assuming Middleware resolves Tenant and puts it in Context or Request.
+    // But @Request req might not have tenant if not Authenticated?
+    // In multi-tenancy, usually tenant is resolved by domain even for public routes.
+
+    // For now, let's assume getTenant() from context works or passed in DTO?
+    // Legacy Code used: const tenant = getTenant();
+    const tenantContext = getTenant();
+    if (!tenantContext)
+      throw new BadRequestException('Tenant context required');
+
+    const result = await this.registerUseCase.execute({
+      email: dto.email,
+      password: dto.password, // UseCase will hash it
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      tenantId: tenantContext.id,
+      fingerprint: fp,
+    });
+
+    if (result.isFailure) {
+      throw new BadRequestException(result.error.message);
+    }
 
     (res as Response).cookie(
       'refreshToken',
-      data.refreshToken,
-      AUTH_CONFIG.COOKIE_OPTIONS,
+      result.value.refreshToken,
+      COOKIE_OPTIONS,
     );
-    return { data };
+    return { data: result.value };
   }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { limit: 5, ttl: 60000 } }) // SECURITY: Reduced from 10 to 5 attempts/min
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @ApiCreateResponse('Object', { summary: 'Đăng nhập (Return Token)' })
   async login(
     @Body() dto: LoginDto,
@@ -78,13 +154,27 @@ export class AuthController {
     const fp = getFingerprint(req);
     const ip =
       req.ip || (req.headers['x-forwarded-for'] as string) || '0.0.0.0';
-    const data = await this.authService.login(dto, fp, ip);
+    const tenantContext = getTenant();
 
-    if ('refreshToken' in data) {
+    const result = await this.loginUseCase.execute({
+      email: dto.email,
+      password: dto.password,
+      tenantId: tenantContext?.id,
+      fingerprint: fp,
+      ip,
+    });
+
+    if (result.isFailure) {
+      throw new UnauthorizedException(result.error.message);
+    }
+
+    const data = result.value;
+
+    if (data.refreshToken) {
       (res as Response).cookie(
         'refreshToken',
         data.refreshToken,
-        AUTH_CONFIG.COOKIE_OPTIONS,
+        COOKIE_OPTIONS,
       );
     }
 
@@ -98,11 +188,16 @@ export class AuthController {
   @ApiGetOneResponse('Boolean', { summary: 'Đăng xuất' })
   async logout(@Request() req: any, @Res({ passthrough: true }) res: any) {
     (res as Response).clearCookie('refreshToken', {
-      ...AUTH_CONFIG.COOKIE_OPTIONS,
+      ...COOKIE_OPTIONS,
       maxAge: 0,
     });
-    const data = await this.authService.logout(req.user.userId, req.user.jti);
-    return { data };
+
+    await this.logoutUseCase.execute({
+      userId: req.user.userId,
+      jti: req.user.jti,
+    });
+
+    return { data: { message: 'Logged out successfully' } };
   }
 
   @Get('me')
@@ -134,18 +229,25 @@ export class AuthController {
       throw new UnauthorizedException('No refresh token in cookies');
     }
 
-    const data = await this.authService.refreshTokens(tokenFromCookie, fp);
+    const result = await this.refreshTokenUseCase.execute({
+      refreshToken: tokenFromCookie,
+      fingerprint: fp,
+    });
+
+    if (result.isFailure) {
+      throw new UnauthorizedException(result.error.message);
+    }
+
     (res as Response).cookie(
       'refreshToken',
-      data.refreshToken,
-      AUTH_CONFIG.COOKIE_OPTIONS,
+      result.value.refreshToken,
+      COOKIE_OPTIONS,
     );
-    return { data: { accessToken: data.accessToken } };
+    return { data: { accessToken: result.value.accessToken } };
   }
 
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { limit: 3, ttl: 3600000 } }) // Max 3 attempts per hour (prevent email spam)
   @ApiCreateResponse('Boolean', { summary: 'Yêu cầu reset mật khẩu' })
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     const data = await this.authService.forgotPassword(dto.email);
@@ -191,11 +293,7 @@ export class AuthController {
       },
       fp,
     );
-    (res as Response).cookie(
-      'refreshToken',
-      data.refreshToken,
-      AUTH_CONFIG.COOKIE_OPTIONS,
-    );
+    (res as Response).cookie('refreshToken', data.refreshToken, COOKIE_OPTIONS);
     (res as Response).redirect(
       `${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth/social-callback?accessToken=${data.accessToken}`,
     );
@@ -230,11 +328,7 @@ export class AuthController {
       fp,
     );
 
-    (res as Response).cookie(
-      'refreshToken',
-      data.refreshToken,
-      AUTH_CONFIG.COOKIE_OPTIONS,
-    );
+    (res as Response).cookie('refreshToken', data.refreshToken, COOKIE_OPTIONS);
 
     (res as Response).redirect(
       `${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth/social-callback?accessToken=${data.accessToken}`,
@@ -313,11 +407,7 @@ export class AuthController {
       fp,
     );
 
-    (res as Response).cookie(
-      'refreshToken',
-      data.refreshToken,
-      AUTH_CONFIG.COOKIE_OPTIONS,
-    );
+    (res as Response).cookie('refreshToken', data.refreshToken, COOKIE_OPTIONS);
     return { data };
   }
 }

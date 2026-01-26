@@ -1,23 +1,63 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { PrismaModule } from '@core/prisma/prisma.module';
+import { CloudinaryModule } from '@integrations/cloudinary/cloudinary.module';
+import { ProductsModule } from '@/catalog/products/products.module';
 
-/**
- * =====================================================================
- * SKUS MODULE - Module quản lý biến thể sản phẩm
- * =====================================================================
- *
- * =====================================================================
- */
 import { SkusController } from './skus.controller';
 import { SkusService } from './skus.service';
 
-import { CloudinaryModule } from '@/platform/integrations/external/cloudinary/cloudinary.module';
+// Use Cases
+import {
+  CreateSkuUseCase,
+  ListSkusUseCase,
+  GetSkuUseCase,
+  UpdateSkuUseCase,
+  DeleteSkuUseCase,
+} from '../application/use-cases/skus';
 
-import { ProductsModule } from '@/catalog/products/products.module';
+// Tokens
+import { SKU_REPOSITORY, PRODUCT_REPOSITORY } from '../domain/repositories';
+
+// Infrastructure
+import {
+  PrismaSkuRepository,
+  PrismaProductRepository,
+} from '../infrastructure/repositories';
 
 @Module({
-  imports: [PrismaModule, CloudinaryModule, ProductsModule],
+  imports: [PrismaModule, CloudinaryModule, forwardRef(() => ProductsModule)],
   controllers: [SkusController],
-  providers: [SkusService],
+  providers: [
+    // Legacy Service
+    SkusService,
+
+    // Use Cases
+    CreateSkuUseCase,
+    ListSkusUseCase,
+    GetSkuUseCase,
+    UpdateSkuUseCase,
+    DeleteSkuUseCase,
+
+    // Repositories
+    PrismaSkuRepository,
+    PrismaProductRepository,
+    {
+      provide: SKU_REPOSITORY,
+      useClass: PrismaSkuRepository,
+    },
+    {
+      provide: PRODUCT_REPOSITORY,
+      useClass: PrismaProductRepository,
+    },
+  ],
+  exports: [
+    SkusService,
+    SKU_REPOSITORY,
+    CreateSkuUseCase,
+    ListSkusUseCase,
+    GetSkuUseCase,
+    UpdateSkuUseCase,
+    DeleteSkuUseCase,
+  ],
 })
 export class SkusModule {}

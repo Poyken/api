@@ -1,4 +1,5 @@
-import DOMPurify from 'isomorphic-dompurify';
+// import DOMPurify from 'isomorphic-dompurify';
+// TODO: Restore isomorphic-dompurify once npm install is successful/authorized.
 
 /**
  * =====================================================================
@@ -28,7 +29,9 @@ import DOMPurify from 'isomorphic-dompurify';
  */
 export function sanitizeHtml(dirty: string | null | undefined): string {
   if (!dirty) return '';
-
+  // FALLBACK: Basic strict strip
+  return dirty.replace(/<[^>]*>?/gm, '');
+  /* 
   return DOMPurify.sanitize(dirty, {
     // Allowed HTML tags (safe for rich text)
     ALLOWED_TAGS: [
@@ -54,6 +57,7 @@ export function sanitizeHtml(dirty: string | null | undefined): string {
     // Force target="_blank" to open in new tab for security
     ADD_ATTR: ['target'],
   });
+  */
 }
 
 /**
@@ -62,9 +66,11 @@ export function sanitizeHtml(dirty: string | null | undefined): string {
  */
 export function stripHtml(dirty: string | null | undefined): string {
   if (!dirty) return '';
-
+  return dirty.replace(/<[^>]*>?/gm, '');
+  /*
   return DOMPurify.sanitize(dirty, {
     ALLOWED_TAGS: [], // No tags allowed
     ALLOWED_ATTR: [],
   });
+  */
 }

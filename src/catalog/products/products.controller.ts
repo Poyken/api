@@ -41,14 +41,38 @@ import { ProductsExportService } from './products-export.service';
 import { ProductsImportService } from './products-import.service';
 import { ProductsService } from './products.service';
 import { BulkUpdateSkusDto } from './dto/bulk-update-skus.dto';
+import { Req } from '@nestjs/common';
+import { CreateProductUseCase } from '@/catalog/application/use-cases/products/create-product.use-case';
+import { GetProductUseCase } from '@/catalog/application/use-cases/products/get-product.use-case';
+import { UpdateProductUseCase } from '@/catalog/application/use-cases/products/update-product.use-case';
+import { DeleteProductUseCase } from '@/catalog/application/use-cases/products/delete-product.use-case';
+import { ListProductsUseCase } from '@/catalog/application/use-cases/products/list-products.use-case';
+import { GetRelatedProductsUseCase } from '@/catalog/application/use-cases/products/get-related-products.use-case';
+import { SemanticSearchUseCase } from '@/catalog/application/use-cases/products/semantic-search.use-case';
+import { BulkUpdateSkusUseCase } from '@/catalog/application/use-cases/products/bulk-update-skus.use-case';
+import { GetSkusDetailsUseCase } from '@/catalog/application/use-cases/products/get-skus-details.use-case';
+import { GetProductTranslationsUseCase } from '@/catalog/application/use-cases/products/get-product-translations.use-case';
+import { TranslateProductUseCase } from '@/catalog/application/use-cases/products/translate-product.use-case';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { ProductMapper } from '@/catalog/infrastructure/mappers/product.mapper';
 
 @ApiTags('Products')
 @Controller('products')
 export class ProductsController {
   constructor(
-    private readonly productsService: ProductsService,
     private readonly exportService: ProductsExportService,
     private readonly importService: ProductsImportService,
+    private readonly createProductUseCase: CreateProductUseCase,
+    private readonly listProductsUseCase: ListProductsUseCase,
+    private readonly getProductUseCase: GetProductUseCase,
+    private readonly updateProductUseCase: UpdateProductUseCase,
+    private readonly deleteProductUseCase: DeleteProductUseCase,
+    private readonly getRelatedProductsUseCase: GetRelatedProductsUseCase,
+    private readonly semanticSearchUseCase: SemanticSearchUseCase,
+    private readonly bulkUpdateSkusUseCase: BulkUpdateSkusUseCase,
+    private readonly getSkusDetailsUseCase: GetSkusDetailsUseCase,
+    private readonly getProductTranslationsUseCase: GetProductTranslationsUseCase,
+    private readonly translateProductUseCase: TranslateProductUseCase,
   ) {}
 
   /**
@@ -59,8 +83,21 @@ export class ProductsController {
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions('product:create')
   @ApiCreateResponse('Product', { summary: 'Tạo sản phẩm mới (Admin)' })
-  async create(@Body() createProductDto: CreateProductDto) {
-    return this.productsService.create(createProductDto);
+  async create(@Body() createProductDto: CreateProductDto, @Req() req: any) {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) throw new BadRequestException('Tenant ID missing');
+
+    const result = await this.createProductUseCase.execute({
+      ...createProductDto,
+      tenantId,
+      categoryIds: createProductDto.categoryIds || [], // Ensure array
+    });
+
+    if (result.isFailure) {
+      throw new BadRequestException(result.error.message);
+    }
+
+    return ProductMapper.toPersistence(result.value.product); // Returning legacy format for now
   }
 
   /**
@@ -73,8 +110,34 @@ export class ProductsController {
   @ApiListResponse('Product', {
     summary: 'Lấy danh sách sản phẩm (có phân trang & lọc)',
   })
-  findAll(@Query() query: FilterProductDto) {
-    return this.productsService.findAll(query);
+  async findAll(@Query() query: FilterProductDto, @Req() req: any) {
+    // For public endpoints, try to get tenant from domain/headers if not authenticated
+    // But for now assume a default or extracted from request
+    const tenantId =
+      req.user?.tenantId || req.headers['x-tenant-id'] || 'default'; // Simplification
+
+    const result = await this.listProductsUseCase.execute({
+      tenantId,
+      page: query.page,
+      limit: query.limit,
+      search: query.search,
+      categoryId: query.categoryId,
+      brandId: query.brandId,
+      minPrice: query.minPrice,
+      maxPrice: query.maxPrice,
+      sortBy: query.sort as any,
+    });
+
+    if (result.isFailure) {
+      throw new BadRequestException(result.error.message);
+    }
+
+    return {
+      data: result.value.products.data.map((p) =>
+        ProductMapper.toPersistence(p),
+      ),
+      meta: result.value.products.meta,
+    };
   }
 
   /**
@@ -87,9 +150,21 @@ export class ProductsController {
   })
   async semanticSearch(
     @Query('q') query: string,
+    @Req() req: any,
     @Query('limit') limit?: string,
   ) {
-    return this.productsService.semanticSearch(query, Number(limit) || 10);
+    const tenantId = req.user?.tenantId || req.headers['x-tenant-id'];
+    const result = await this.semanticSearchUseCase.execute({
+      query,
+      limit: Number(limit) || 10,
+      tenantId,
+    });
+
+    if (result.isFailure) {
+      throw new BadRequestException(result.error.message);
+    }
+
+    return result.value.products;
   }
 
   /**
@@ -101,7 +176,13 @@ export class ProductsController {
   @Cached(300000)
   @ApiGetOneResponse('Product', { summary: 'Lấy chi tiết sản phẩm' })
   async findOne(@Param('id') id: string) {
-    return this.productsService.findOne(id);
+    const result = await this.getProductUseCase.execute({ productId: id });
+
+    if (result.isFailure) {
+      throw new NotFoundException(result.error.message);
+    }
+
+    return ProductMapper.toPersistence(result.value.product);
   }
 
   /**
@@ -111,7 +192,15 @@ export class ProductsController {
   @Cached(300000)
   @ApiListResponse('Product', { summary: 'Lấy danh sách sản phẩm liên quan' })
   async getRelated(@Param('id') id: string) {
-    return this.productsService.getRelatedProducts(id);
+    const result = await this.getRelatedProductsUseCase.execute({
+      productId: id,
+    });
+
+    if (result.isFailure) {
+      return []; // Silently return empty for simplified UI experience
+    }
+
+    return result.value.products.map((p) => ProductMapper.toPersistence(p));
   }
 
   /**
@@ -126,7 +215,16 @@ export class ProductsController {
     @Param('id') id: string,
     @Body() updateProductDto: UpdateProductDto,
   ) {
-    return this.productsService.update(id, updateProductDto);
+    const result = await this.updateProductUseCase.execute({
+      productId: id,
+      ...updateProductDto,
+    });
+
+    if (result.isFailure) {
+      throw new BadRequestException(result.error.message);
+    }
+
+    return ProductMapper.toPersistence(result.value.product);
   }
 
   /**
@@ -140,7 +238,16 @@ export class ProductsController {
     @Param('id') id: string,
     @Body() body: BulkUpdateSkusDto,
   ) {
-    return this.productsService.bulkUpdateSkus(id, body.skus);
+    const result = await this.bulkUpdateSkusUseCase.execute({
+      productId: id,
+      skus: body.skus,
+    });
+
+    if (result.isFailure) {
+      throw new BadRequestException(result.error.message);
+    }
+
+    return result.value;
   }
 
   /**
@@ -151,7 +258,13 @@ export class ProductsController {
   @RequirePermissions('product:delete')
   @ApiDeleteResponse('Product', { summary: 'Xóa sản phẩm (Admin)' })
   async remove(@Param('id') id: string) {
-    return this.productsService.remove(id);
+    const result = await this.deleteProductUseCase.execute({ productId: id });
+
+    if (result.isFailure) {
+      throw new BadRequestException(result.error.message);
+    }
+
+    return { success: true };
   }
 
   /**
@@ -163,7 +276,15 @@ export class ProductsController {
     summary: 'Lấy thông tin nhiều SKUs (cho Guest Cart)',
   })
   async getSkusDetails(@Body() body: { skuIds: string[] }) {
-    return this.productsService.getSkusByIds(body.skuIds);
+    const result = await this.getSkusDetailsUseCase.execute({
+      skuIds: body.skuIds,
+    });
+
+    if (result.isFailure) {
+      throw new BadRequestException(result.error.message);
+    }
+
+    return result.value.skus;
   }
 
   @Get(':id/translations')
@@ -171,7 +292,15 @@ export class ProductsController {
   @RequirePermissions('product:read')
   @ApiListResponse('any', { summary: 'Lấy bản dịch sản phẩm' })
   async getTranslations(@Param('id') id: string) {
-    return this.productsService.getTranslations(id);
+    const result = await this.getProductTranslationsUseCase.execute({
+      productId: id,
+    });
+
+    if (result.isFailure) {
+      throw new BadRequestException(result.error.message);
+    }
+
+    return result.value.translations;
   }
 
   @Post(':id/translations')
@@ -182,7 +311,16 @@ export class ProductsController {
     @Param('id') id: string,
     @Body() body: { locale: string; name: string; description?: string },
   ) {
-    return this.productsService.translate(id, body);
+    const result = await this.translateProductUseCase.execute({
+      productId: id,
+      ...body,
+    });
+
+    if (result.isFailure) {
+      throw new BadRequestException(result.error.message);
+    }
+
+    return result.value.translation;
   }
 
   /**

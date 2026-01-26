@@ -104,6 +104,7 @@ export class CommissionService {
           transactions.push({
             userId: blog.user.id,
             orderId: order.id,
+            tenantId: order.tenantId,
             amount: new Prisma.Decimal(directCommission),
             type: 'DIRECT_REFERRAL',
             status: 'COMPLETED',
@@ -118,6 +119,7 @@ export class CommissionService {
             transactions.push({
               userId: blog.user.referredByUserId,
               orderId: order.id,
+              tenantId: order.tenantId,
               amount: new Prisma.Decimal(tier2Commission),
               type: 'TIER_2_REFERRAL',
               status: 'COMPLETED',
@@ -201,6 +203,7 @@ export class CommissionService {
             amount: new Prisma.Decimal(referralBonus),
             type: 'SUBSCRIPTION_FEE',
             status: 'COMPLETED',
+            tenantId: tenant.id,
             note: `Thưởng giới thiệu Shop gia nhập nền tảng: ${tenant.name}`,
           },
         });

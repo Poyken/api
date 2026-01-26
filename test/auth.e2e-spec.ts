@@ -13,8 +13,7 @@
  *
  * =====================================================================
  */
-import { INestApplication } from '@nestjs/common';
-import { ZodValidationPipe } from 'nestjs-zod';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
@@ -39,7 +38,13 @@ describe('AuthController (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api');
-    app.useGlobalPipes(new ZodValidationPipe());
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    );
     await app.init();
   });
 
@@ -109,7 +114,7 @@ describe('AuthController (e2e)', () => {
           accessToken = res.body.data.accessToken;
           // Refresh token might be in cookies
           const cookies = res.headers['set-cookie'];
-          if (Array.isArray(cookies)) {
+          if (cookies && Array.isArray(cookies)) {
             const refreshCookie = cookies.find((c: string) =>
               c.startsWith('refreshToken='),
             );
@@ -178,7 +183,7 @@ describe('AuthController (e2e)', () => {
         return;
       }
 
-      return request(app.getHttpServer())
+      await request(app.getHttpServer())
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);

@@ -1,13 +1,5 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
-
-/**
- * =====================================================================
- * AUTH MODULE - Module bảo mật và xác thực
- * =====================================================================
- *
- * =====================================================================
- */
 import { NotificationsModule } from '@/notifications/notifications.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -16,12 +8,29 @@ import { TokenService } from './token.service';
 import { TwoFactorService } from './two-factor.service';
 
 import { EmailModule } from '@/platform/integrations/external/email/email.module';
+import { UsersModule } from '../users/users.module';
+import { TenantsModule } from '../tenants/tenants.module';
 import { PermissionService } from './permission.service';
 import { FacebookStrategy } from './strategies/facebook.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 
+// Clean Architecture
+import { USER_REPOSITORY } from '../domain/repositories/user.repository.interface';
+import { PrismaUserRepository } from '../infrastructure/repositories/prisma-user.repository';
+import { TENANT_REPOSITORY } from '../domain/repositories/tenant.repository.interface';
+import { PrismaTenantRepository } from '../infrastructure/repositories/prisma-tenant.repository';
+import { PASSWORD_HASHER } from '../domain/services/password-hasher.interface';
+import { BcryptPasswordHasher } from '../infrastructure/services/bcrypt-password-hasher.service';
+import * as UseCases from '../application/use-cases/auth';
+
 @Module({
-  imports: [JwtModule.register({}), NotificationsModule, EmailModule],
+  imports: [
+    JwtModule.register({}),
+    NotificationsModule,
+    EmailModule,
+    UsersModule,
+    TenantsModule,
+  ],
   controllers: [AuthController],
   providers: [
     AuthService,
@@ -29,9 +38,18 @@ import { GoogleStrategy } from './strategies/google.strategy';
     JwtStrategy,
     GoogleStrategy,
     FacebookStrategy,
-    TwoFactorService, // Added TwoFactorService
-    PermissionService, // Added PermissionService for centralized permission management
+    TwoFactorService,
+    PermissionService,
+    ...Object.values(UseCases),
   ],
-  exports: [AuthService, TokenService, TwoFactorService, PermissionService], // Export PermissionService
+  exports: [
+    AuthService,
+    TokenService,
+    TwoFactorService,
+    PermissionService,
+    USER_REPOSITORY,
+    PASSWORD_HASHER,
+    ...Object.values(UseCases),
+  ],
 })
 export class AuthModule {}
