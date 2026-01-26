@@ -42,7 +42,7 @@ export class PrismaProductRepository implements IProductRepository {
     const tenant = getTenant();
     const cacheKey = `product:${tenant?.id || 'public'}:${id}`;
 
-    return this.cacheService.getOrSet(
+    const cachedProduct = await this.cacheService.getOrSet(
       cacheKey,
       async () => {
         const data = await (this.prisma.product as any).findFirst({
@@ -57,6 +57,18 @@ export class PrismaProductRepository implements IProductRepository {
       },
       CACHE_TTL.PRODUCT_DETAIL,
     );
+
+    if (!cachedProduct) return null;
+
+    // Reconstitute if retrieved from cache as a plain object
+    if (!(cachedProduct instanceof Product)) {
+      // In case we only stored persistence form in cache, or just plain props
+      // ProductMapper.toPersistence returns Record<string, any>
+      // We might need to handle this.
+      return Product.fromPersistence(cachedProduct as any);
+    }
+
+    return cachedProduct;
   }
 
   async findByIdOrFail(id: string): Promise<Product> {
